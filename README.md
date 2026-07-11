@@ -1,3 +1,9 @@
+<div align="center">
+
+**简体中文** · [English](./README.en.md) · [繁體中文](./README.zh-TW.md)
+
+</div>
+
 # Prompt Caddy
 
 一款轻量、完全本地化的桌面端 Prompt 管理工具，主要面向非计算机专业背景的用户高效地创建、分类、检索和复用日常使用的 AI 提示词。
