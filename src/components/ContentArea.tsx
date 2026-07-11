@@ -1,11 +1,26 @@
 import { useState } from 'react';
 import { useStore } from '../store';
+import { useTranslation } from '../i18n';
 import PromptCard from './PromptCard';
 import { Plus, ArrowUpDown, Star, CheckSquare, X, Trash2, FolderInput, FileDown } from 'lucide-react';
+import { Category } from '../types';
 import * as api from '../api';
 import toast from 'react-hot-toast';
 
 type SortOption = 'title-asc' | 'title-desc' | 'favorites';
+
+/** Build the full category path string like "Parent - Child" */
+function buildCategoryPath(cat: Category, categories: Category[]): string {
+  const parts: string[] = [cat.name];
+  let current = cat;
+  while (current.parent_id) {
+    const parent = categories.find(c => c.id === current.parent_id);
+    if (!parent) break;
+    parts.unshift(parent.name);
+    current = parent;
+  }
+  return parts.join(' - ');
+}
 
 export default function ContentArea() {
   const {
@@ -25,6 +40,7 @@ export default function ContentArea() {
     movePromptsToCategory,
   } = useStore();
 
+  const { t } = useTranslation();
   const [sortBy, setSortBy] = useState<SortOption>('title-asc');
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showMoveDialog, setShowMoveDialog] = useState(false);
@@ -63,15 +79,15 @@ export default function ContentArea() {
   const handleBulkDelete = async () => {
     if (selectedPrompts.size === 0) return;
 
-    if (confirm(`确定要删除选中的 ${selectedPrompts.size} 个 Prompt 吗？`)) {
+    if (confirm(t('content.confirm.batchDelete', { count: selectedPrompts.size }))) {
       try {
         for (const id of selectedPrompts) {
           await deletePrompt(id);
         }
         clearSelection();
-        toast.success('批量删除成功');
+        toast.success(t('content.msg.batchDeleteSuccess'));
       } catch (error) {
-        toast.error('批量删除失败');
+        toast.error(t('content.msg.batchDeleteFailed'));
       }
     }
   };
@@ -81,19 +97,21 @@ export default function ContentArea() {
     try {
       const ids = Array.from(selectedPrompts);
       const jsonData = await api.exportPromptsJson(ids);
-      // Create and download file
-      const blob = new Blob([jsonData], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `prompts_export_${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success(`已导出 ${ids.length} 个 Prompt`);
+      // Use configured export path
+      const saved = localStorage.getItem('prompt-caddy-settings');
+      let exportPath = 'D:\\downloads';
+      if (saved) {
+        try {
+          const settings = JSON.parse(saved);
+          if (settings.exportPath) exportPath = settings.exportPath;
+        } catch {}
+      }
+      const filename = `prompts_export_${new Date().toISOString().slice(0, 10)}.json`;
+      const fullPath = `${exportPath}\\${filename}`.replace(/\\\\/g, '\\');
+      await api.saveFileToPath(fullPath, jsonData);
+      toast.success(t('content.msg.exportedTo', { path: fullPath }));
     } catch (error) {
-      toast.error('导出失败');
+      toast.error(t('content.msg.exportFailed', { error: String(error) }));
     }
   };
 
@@ -104,9 +122,9 @@ export default function ContentArea() {
       await movePromptsToCategory(ids, categoryId);
       clearSelection();
       setShowMoveDialog(false);
-      toast.success('批量移动成功');
+      toast.success(t('content.msg.batchMoveSuccess'));
     } catch (error) {
-      toast.error('移动失败');
+      toast.error(t('content.msg.moveFailed'));
     }
   };
 
@@ -117,12 +135,12 @@ export default function ContentArea() {
         <div className="flex items-center gap-3">
           <h2 className="text-white font-medium">
             {isSearching
-              ? `搜索结果 (${displayPrompts.length})`
+              ? t('content.searchResults', { count: displayPrompts.length })
               : isFavoritesOnly
-              ? '我的收藏'
+              ? t('content.favorites')
               : currentCategory
               ? currentCategory.name
-              : '全部 Prompt'}
+              : t('content.allPrompts')}
           </h2>
 
           {/* Sort button */}
@@ -132,7 +150,7 @@ export default function ContentArea() {
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
             >
               <ArrowUpDown size={14} />
-              排序
+              {t('content.sort')}
             </button>
 
             {showSortMenu && (
@@ -153,7 +171,7 @@ export default function ContentArea() {
                         : 'text-white/70 hover:bg-white/10'
                     }`}
                   >
-                    标题升序
+                    {t('content.sortTitleAsc')}
                   </button>
                   <button
                     onClick={() => {
@@ -166,7 +184,7 @@ export default function ContentArea() {
                         : 'text-white/70 hover:bg-white/10'
                     }`}
                   >
-                    标题降序
+                    {t('content.sortTitleDesc')}
                   </button>
                   {!isFavoritesOnly && (
                     <button
@@ -181,7 +199,7 @@ export default function ContentArea() {
                       }`}
                     >
                       <Star size={14} />
-                      收藏优先
+                      {t('content.sortFavorites')}
                     </button>
                   )}
                 </div>
@@ -194,21 +212,21 @@ export default function ContentArea() {
           {isMultiSelectMode ? (
             <>
               <span className="text-sm text-white/70">
-                已选 {selectedPrompts.size} 项
+                {t('content.selectedCount', { count: selectedPrompts.size })}
               </span>
               <button
                 onClick={selectAllPrompts}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               >
                 <CheckSquare size={14} />
-                全选
+                {t('content.selectAll')}
               </button>
               <button
                 onClick={clearSelection}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               >
                 <X size={14} />
-                取消选择
+                {t('content.deselect')}
               </button>
               <div className="relative">
                 <button
@@ -216,7 +234,7 @@ export default function ContentArea() {
                   className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                 >
                   <FolderInput size={14} />
-                  移动分类
+                  {t('content.moveCategory')}
                 </button>
                 {showMoveDialog && (
                   <>
@@ -226,17 +244,27 @@ export default function ContentArea() {
                         onClick={() => handleBulkMove(undefined)}
                         className="w-full text-left px-3 py-2 text-sm text-white/70 hover:bg-white/10 rounded"
                       >
-                        未分类
+                        {t('content.uncategorized')}
                       </button>
-                      {categories.map((cat) => (
-                        <button
-                          key={cat.id}
-                          onClick={() => handleBulkMove(cat.id)}
-                          className="w-full text-left px-3 py-2 text-sm text-white/70 hover:bg-white/10 rounded"
-                        >
-                          {cat.name}
-                        </button>
-                      ))}
+                      {(() => {
+                        const rootCats = categories.filter(c => !c.parent_id);
+                        const result: { cat: Category; label: string }[] = [];
+                        const traverse = (cat: Category) => {
+                          result.push({ cat, label: buildCategoryPath(cat, categories) });
+                          const children = categories.filter(c => c.parent_id === cat.id);
+                          children.forEach(child => traverse(child));
+                        };
+                        rootCats.forEach(cat => traverse(cat));
+                        return result.map(item => (
+                          <button
+                            key={item.cat.id}
+                            onClick={() => handleBulkMove(item.cat.id)}
+                            className="w-full text-left px-3 py-2 text-sm text-white/70 hover:bg-white/10 rounded whitespace-nowrap"
+                          >
+                            {item.label}
+                          </button>
+                        ));
+                      })()}
                     </div>
                   </>
                 )}
@@ -246,14 +274,14 @@ export default function ContentArea() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-white/10 rounded-lg transition-colors"
               >
                 <Trash2 size={14} />
-                删除
+                {t('content.delete')}
               </button>
               <button
                 onClick={handleBulkExport}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
               >
                 <FileDown size={14} />
-                导出
+                {t('content.export')}
               </button>
             </>
           ) : (
@@ -262,7 +290,7 @@ export default function ContentArea() {
               className="flex items-center gap-1.5 px-4 py-2 glass-button text-white text-sm"
             >
               <Plus size={16} />
-              新建 Prompt
+              {t('content.newPrompt')}
             </button>
           )}
         </div>
@@ -272,8 +300,8 @@ export default function ContentArea() {
       <div className="flex-1 overflow-y-auto scrollbar-thin p-4">
         {displayPrompts.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-white/50">
-            <p className="text-lg mb-2">暂无 Prompt</p>
-            <p className="text-sm">点击「新建 Prompt」开始创建</p>
+            <p className="text-lg mb-2">{t('content.noPrompt')}</p>
+            <p className="text-sm">{t('content.noPromptHint')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">

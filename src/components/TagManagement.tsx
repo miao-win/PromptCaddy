@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useStore } from '../store';
+import { useTranslation } from '../i18n';
 import { Tag } from '../types';
 import { Plus, Edit2, Trash2, Save, Palette } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -13,6 +14,7 @@ const DEFAULT_COLORS = [
 
 export default function TagManagement() {
   const { tags, createTag, updateTag, deleteTag } = useStore();
+  const { t } = useTranslation();
 
   const [isCreating, setIsCreating] = useState(false);
   const [newTagName, setNewTagName] = useState('');
@@ -24,7 +26,7 @@ export default function TagManagement() {
 
   const handleCreateTag = async () => {
     if (!newTagName.trim()) {
-      toast.error('请输入标签名称');
+      toast.error(t('tags.msg.nameRequired'));
       return;
     }
 
@@ -33,15 +35,15 @@ export default function TagManagement() {
       setNewTagName('');
       setNewTagColor(DEFAULT_COLORS[0]);
       setIsCreating(false);
-      toast.success('标签创建成功');
+      toast.success(t('tags.msg.created'));
     } catch (error) {
-      toast.error('创建标签失败，可能存在重名');
+      toast.error(t('tags.msg.createFailed'));
     }
   };
 
   const handleUpdateTag = async () => {
     if (!editingTag || !editTagName.trim()) {
-      toast.error('请输入标签名称');
+      toast.error(t('tags.msg.nameRequired'));
       return;
     }
 
@@ -50,19 +52,19 @@ export default function TagManagement() {
       setEditingTag(null);
       setEditTagName('');
       setEditTagColor('');
-      toast.success('标签更新成功');
+      toast.success(t('tags.msg.updated'));
     } catch (error) {
-      toast.error('更新标签失败，可能存在重名');
+      toast.error(t('tags.msg.updateFailed'));
     }
   };
 
   const handleDeleteTag = async (tag: Tag) => {
-    if (confirm(`确定要删除标签「${tag.name}」吗？所有关联的 Prompt 将解除此标签绑定。`)) {
+    if (confirm(t('tags.confirm.delete', { name: tag.name }))) {
       try {
         await deleteTag(tag.id);
-        toast.success('标签删除成功');
+        toast.success(t('tags.msg.deleted'));
       } catch (error) {
-        toast.error('删除标签失败');
+        toast.error(t('tags.msg.deleteFailed'));
       }
     }
   };
@@ -83,13 +85,13 @@ export default function TagManagement() {
     <div className="h-full flex flex-col">
       {/* Header */}
       <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">标签管理</h1>
+        <h1 className="text-xl font-bold text-white">{t('tags.title')}</h1>
         <button
           onClick={() => setIsCreating(true)}
           className="flex items-center gap-1.5 px-4 py-2 glass-button text-white text-sm"
         >
           <Plus size={16} />
-          新建标签
+          {t('tags.newTag')}
         </button>
       </div>
 
@@ -98,14 +100,14 @@ export default function TagManagement() {
         {/* Create form */}
         {isCreating && (
           <div className="glass-card p-4 mb-4">
-            <h3 className="text-white font-medium mb-3">新建标签</h3>
+            <h3 className="text-white font-medium mb-3">{t('tags.newTag')}</h3>
             <div className="flex gap-3">
               <div className="flex-1">
                 <input
                   type="text"
                   value={newTagName}
                   onChange={(e) => setNewTagName(e.target.value)}
-                  placeholder="标签名称"
+                  placeholder={t('tags.tagName')}
                   className="w-full px-3 py-2 glass-input text-white placeholder-white/50"
                   autoFocus
                   onKeyDown={(e) => {
@@ -157,13 +159,13 @@ export default function TagManagement() {
                   }}
                   className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                 >
-                  取消
+                  {t('tags.cancel')}
                 </button>
                 <button
                   onClick={handleCreateTag}
                   className="px-4 py-2 glass-button text-white text-sm"
                 >
-                  创建
+                  {t('tags.create')}
                 </button>
               </div>
             </div>
@@ -181,7 +183,7 @@ export default function TagManagement() {
                       type="text"
                       value={editTagName}
                       onChange={(e) => setEditTagName(e.target.value)}
-                      placeholder="标签名称"
+                      placeholder={t('tags.tagName')}
                       className="w-full px-3 py-2 glass-input text-white placeholder-white/50"
                       autoFocus
                       onKeyDown={(e) => {
@@ -227,14 +229,14 @@ export default function TagManagement() {
                       onClick={handleCancelEdit}
                       className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                     >
-                      取消
+                      {t('tags.cancel')}
                     </button>
                     <button
                       onClick={handleUpdateTag}
                       className="flex items-center gap-1.5 px-4 py-2 glass-button text-white text-sm"
                     >
                       <Save size={14} />
-                      保存
+                      {t('tags.save')}
                     </button>
                   </div>
                 </div>
@@ -264,8 +266,8 @@ export default function TagManagement() {
 
           {tags.length === 0 && (
             <div className="text-center py-12 text-white/50">
-              <p className="text-lg mb-2">暂无标签</p>
-              <p className="text-sm">点击「新建标签」开始创建</p>
+              <p className="text-lg mb-2">{t('tags.noTags')}</p>
+              <p className="text-sm">{t('tags.noTagsHint')}</p>
             </div>
           )}
         </div>

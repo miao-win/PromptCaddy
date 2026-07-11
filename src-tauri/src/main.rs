@@ -47,11 +47,6 @@ fn main() {
             commands::update_prompt,
             commands::delete_prompt,
             commands::toggle_favorite,
-            // Variants
-            commands::get_variants,
-            commands::create_variant,
-            commands::update_variant,
-            commands::delete_variant,
             // Prompt-Tag relations
             commands::add_tag_to_prompt,
             commands::remove_tag_from_prompt,
@@ -71,6 +66,11 @@ fn main() {
             commands::export_prompts_markdown,
             commands::export_prompts_csv,
             commands::import_prompts_json,
+            // Snapshot cleanup
+            commands::delete_all_snapshots,
+            // File system
+            commands::save_file_to_path,
+            commands::pick_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

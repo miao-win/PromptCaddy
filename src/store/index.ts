@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Category, Tag, Prompt, Variant, Snapshot, SearchResult } from '../types';
+import { Category, Tag, Prompt, Snapshot, SearchResult } from '../types';
 import * as api from '../api';
 
 interface AppState {
@@ -7,19 +7,18 @@ interface AppState {
   categories: Category[];
   tags: Tag[];
   prompts: Prompt[];
-  variants: Variant[];
   snapshots: Snapshot[];
   searchResults: SearchResult[];
 
   // UI State
   selectedCategory: string | null;
   selectedPrompt: Prompt | null;
-  selectedVariant: Variant | null;
   isFavoritesOnly: boolean;
   isSearching: boolean;
   searchQuery: string;
   isEditing: boolean;
   isCreating: boolean;
+  isFullscreenEditing: boolean;
   selectedPrompts: Set<string>;
   isMultiSelectMode: boolean;
 
@@ -27,7 +26,6 @@ interface AppState {
   loadCategories: () => Promise<void>;
   loadTags: () => Promise<void>;
   loadPrompts: (categoryId?: string, favoritesOnly?: boolean) => Promise<void>;
-  loadVariants: (promptId: string) => Promise<Variant[]>;
   loadPromptTags: (promptId: string) => Promise<Tag[]>;
   loadSnapshots: () => Promise<void>;
 
@@ -44,10 +42,6 @@ interface AppState {
   deletePrompt: (id: string) => Promise<void>;
   toggleFavorite: (id: string) => Promise<void>;
 
-  createVariant: (promptId: string, name: string, content: string) => Promise<Variant>;
-  updateVariant: (id: string, name: string, content: string) => Promise<void>;
-  deleteVariant: (id: string) => Promise<void>;
-
   addTagToPrompt: (promptId: string, tagId: string) => Promise<void>;
   removeTagFromPrompt: (promptId: string, tagId: string) => Promise<void>;
 
@@ -56,18 +50,19 @@ interface AppState {
   createSnapshot: (name?: string) => Promise<Snapshot>;
   restoreSnapshot: (snapshotId: string) => Promise<void>;
   deleteSnapshot: (id: string) => Promise<void>;
+  deleteAllSnapshots: () => Promise<void>;
 
   clearAllData: () => Promise<void>;
   movePromptsToCategory: (promptIds: string[], categoryId?: string) => Promise<void>;
 
   setSelectedCategory: (categoryId: string | null) => void;
   setSelectedPrompt: (prompt: Prompt | null) => void;
-  setSelectedVariant: (variant: Variant | null) => void;
   setIsFavoritesOnly: (isFavoritesOnly: boolean) => void;
   setIsSearching: (isSearching: boolean) => void;
   setSearchQuery: (query: string) => void;
   setIsEditing: (isEditing: boolean) => void;
   setIsCreating: (isCreating: boolean) => void;
+  setIsFullscreenEditing: (isFullscreenEditing: boolean) => void;
   togglePromptSelection: (promptId: string) => void;
   selectAllPrompts: () => void;
   clearSelection: () => void;
@@ -79,19 +74,18 @@ export const useStore = create<AppState>((set, get) => ({
   categories: [],
   tags: [],
   prompts: [],
-  variants: [],
   snapshots: [],
   searchResults: [],
 
   // Initial UI State
   selectedCategory: null,
   selectedPrompt: null,
-  selectedVariant: null,
   isFavoritesOnly: false,
   isSearching: false,
   searchQuery: '',
   isEditing: false,
   isCreating: false,
+  isFullscreenEditing: false,
   selectedPrompts: new Set(),
   isMultiSelectMode: false,
 
@@ -120,17 +114,6 @@ export const useStore = create<AppState>((set, get) => ({
       set({ prompts });
     } catch (error) {
       console.error('Failed to load prompts:', error);
-    }
-  },
-
-  loadVariants: async (promptId: string) => {
-    try {
-      const variants = await api.getVariants(promptId);
-      set({ variants });
-      return variants;
-    } catch (error) {
-      console.error('Failed to load variants:', error);
-      return [];
     }
   },
 
@@ -246,7 +229,7 @@ export const useStore = create<AppState>((set, get) => ({
       await api.deletePrompt(id);
       await get().loadPrompts(get().selectedCategory ?? undefined, get().isFavoritesOnly);
       if (get().selectedPrompt?.id === id) {
-        set({ selectedPrompt: null, selectedVariant: null, isEditing: false });
+        set({ selectedPrompt: null, isEditing: false });
       }
     } catch (error) {
       console.error('Failed to delete prompt:', error);
@@ -264,46 +247,6 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
-      throw error;
-    }
-  },
-
-  createVariant: async (promptId: string, name: string, content: string) => {
-    try {
-      const variant = await api.createVariant(promptId, name, content);
-      await get().loadVariants(promptId);
-      return variant;
-    } catch (error) {
-      console.error('Failed to create variant:', error);
-      throw error;
-    }
-  },
-
-  updateVariant: async (id: string, name: string, content: string) => {
-    try {
-      await api.updateVariant(id, name, content);
-      const prompt = get().selectedPrompt;
-      if (prompt) {
-        await get().loadVariants(prompt.id);
-      }
-    } catch (error) {
-      console.error('Failed to update variant:', error);
-      throw error;
-    }
-  },
-
-  deleteVariant: async (id: string) => {
-    try {
-      await api.deleteVariant(id);
-      const prompt = get().selectedPrompt;
-      if (prompt) {
-        await get().loadVariants(prompt.id);
-      }
-      if (get().selectedVariant?.id === id) {
-        set({ selectedVariant: null });
-      }
-    } catch (error) {
-      console.error('Failed to delete variant:', error);
       throw error;
     }
   },
@@ -357,7 +300,7 @@ export const useStore = create<AppState>((set, get) => ({
       await get().loadTags();
       await get().loadPrompts(get().selectedCategory ?? undefined, get().isFavoritesOnly);
       await get().loadSnapshots();
-      set({ selectedPrompt: null, selectedVariant: null, isEditing: false });
+      set({ selectedPrompt: null, isEditing: false });
     } catch (error) {
       console.error('Failed to restore snapshot:', error);
       throw error;
@@ -374,13 +317,23 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  deleteAllSnapshots: async () => {
+    try {
+      await api.deleteAllSnapshots();
+      await get().loadSnapshots();
+    } catch (error) {
+      console.error('Failed to delete all snapshots:', error);
+      throw error;
+    }
+  },
+
   clearAllData: async () => {
     try {
       await api.clearAllData();
       await get().loadCategories();
       await get().loadTags();
       await get().loadPrompts();
-      set({ selectedPrompt: null, selectedVariant: null, isEditing: false, selectedCategory: null, isFavoritesOnly: false });
+      set({ selectedPrompt: null, isEditing: false, selectedCategory: null, isFavoritesOnly: false });
     } catch (error) {
       console.error('Failed to clear data:', error);
       throw error;
@@ -403,13 +356,8 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setSelectedPrompt: (prompt: Prompt | null) => {
-    set({ selectedPrompt: prompt, selectedVariant: null, isEditing: !!prompt });
-    if (prompt) {
-      get().loadVariants(prompt.id);
-    }
+    set({ selectedPrompt: prompt, isEditing: !!prompt });
   },
-
-  setSelectedVariant: (variant: Variant | null) => set({ selectedVariant: variant }),
 
   setIsFavoritesOnly: (isFavoritesOnly: boolean) => {
     set({ isFavoritesOnly, selectedCategory: null, isSearching: false, searchQuery: '', searchResults: [] });
@@ -423,6 +371,8 @@ export const useStore = create<AppState>((set, get) => ({
   setIsEditing: (isEditing: boolean) => set({ isEditing }),
 
   setIsCreating: (isCreating: boolean) => set({ isCreating }),
+
+  setIsFullscreenEditing: (isFullscreenEditing: boolean) => set({ isFullscreenEditing }),
 
   togglePromptSelection: (promptId: string) => {
     const selected = new Set(get().selectedPrompts);

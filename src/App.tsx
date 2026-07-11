@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useStore } from './store';
+import { I18nProvider, useTranslation } from './i18n';
 import Sidebar from './components/Sidebar';
 import ContentArea from './components/ContentArea';
 import EditPanel from './components/EditPanel';
+import FullscreenEditor from './components/FullscreenEditor';
 import SearchBar from './components/SearchBar';
 import TagManagement from './components/TagManagement';
 import Settings from './components/Settings';
@@ -10,9 +12,11 @@ import Toaster from './components/Toaster';
 
 type Page = 'home' | 'tags' | 'settings';
 
-function App() {
-  const { loadCategories, loadTags, loadPrompts, loadSnapshots, createSnapshot } = useStore();
+function AppInner() {
+  const { loadCategories, loadTags, loadPrompts, loadSnapshots, createSnapshot, deleteAllSnapshots, isFullscreenEditing } = useStore();
+  const { t } = useTranslation();
   const [currentPage, setCurrentPage] = useState<Page>('home');
+  const hasInitialized = useRef(false);
 
   // Initialize theme from saved settings (runs once at app startup)
   useEffect(() => {
@@ -38,18 +42,22 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Prevent double initialization in React StrictMode (development)
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
     const init = async () => {
       await loadCategories();
       await loadTags();
       await loadPrompts();
       await loadSnapshots();
 
-      // Create startup snapshot if none exists
+      // Clear old snapshots and create a fresh startup snapshot
       try {
-        const existingSnapshots = useStore.getState().snapshots;
-        if (existingSnapshots.length === 0) {
-          await createSnapshot('启动快照');
-        }
+        await deleteAllSnapshots();
+        const now = new Date();
+        const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        await createSnapshot(`${t('app.startupSnapshot')} - ${dateStr}`);
       } catch (e) {
         console.error('Failed to create startup snapshot:', e);
       }
@@ -83,18 +91,33 @@ function App() {
         {/* Sidebar */}
         <Sidebar currentPage={currentPage} onPageChange={setCurrentPage} />
 
-        {/* Main content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {renderPage()}
-        </div>
+        {/* Content area */}
+        {isFullscreenEditing ? (
+          <FullscreenEditor />
+        ) : (
+          <div className="flex-1 flex overflow-hidden relative">
+            {/* Main content */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {renderPage()}
+            </div>
 
-        {/* Edit panel - only show on home page */}
-        {currentPage === 'home' && <EditPanel />}
+            {/* Edit panel - only show on home page */}
+            {currentPage === 'home' && <EditPanel />}
+          </div>
+        )}
       </div>
 
       {/* Toast notifications */}
       <Toaster />
     </div>
+  );
+}
+
+function App() {
+  return (
+    <I18nProvider>
+      <AppInner />
+    </I18nProvider>
   );
 }
 

@@ -1,52 +1,52 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
-import { Tag } from '../types';
-import { X, Plus, Save, Eye, Edit2, RefreshCw } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { useTranslation } from '../i18n';
+import { Tag, Category } from '../types';
+import { X, Plus, Save, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+/** Build the full category path string like "Parent - Child" */
+function buildCategoryPath(cat: Category, categories: Category[]): string {
+  const parts: string[] = [cat.name];
+  let current = cat;
+  while (current.parent_id) {
+    const parent = categories.find(c => c.id === current.parent_id);
+    if (!parent) break;
+    parts.unshift(parent.name);
+    current = parent;
+  }
+  return parts.join(' - ');
+}
 
 export default function EditPanel() {
   const {
     selectedPrompt,
-    selectedVariant,
     tags,
-    variants,
     categories,
     isEditing,
     isCreating,
     setSelectedPrompt,
-    setSelectedVariant,
     setIsEditing,
     setIsCreating,
+    setIsFullscreenEditing,
     updatePrompt,
     createPrompt,
-    createVariant,
-    updateVariant,
-    deleteVariant,
-    loadVariants,
     loadPromptTags,
     addTagToPrompt,
     removeTagFromPrompt,
     createTag,
   } = useStore();
 
+  const { t } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [remark, setRemark] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
-  const [isPreview, setIsPreview] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showTagSelect, setShowTagSelect] = useState(false);
   const [promptTags, setPromptTags] = useState<Tag[]>([]);
   const [newTagName, setNewTagName] = useState('');
   const [isCreatingTag, setIsCreatingTag] = useState(false);
-
-  // Variant state
-  const [variantName, setVariantName] = useState('');
-  const [variantContent, setVariantContent] = useState('');
-  const [isEditingVariant, setIsEditingVariant] = useState(false);
-  const [showAddVariant, setShowAddVariant] = useState(false);
 
   // Track if content has been modified
   const isDirtyRef = useRef(false);
@@ -58,7 +58,6 @@ export default function EditPanel() {
       setContent(selectedPrompt.content);
       setRemark(selectedPrompt.remark || '');
       setCategoryId(selectedPrompt.category_id || '');
-      loadVariants(selectedPrompt.id);
       // Load prompt tags from API
       loadPromptTags(selectedPrompt.id).then((loadedTags) => {
         setPromptTags(loadedTags);
@@ -81,18 +80,6 @@ export default function EditPanel() {
     }
   }, [selectedPrompt, isCreating]);
 
-  useEffect(() => {
-    if (selectedVariant) {
-      setVariantName(selectedVariant.name);
-      setVariantContent(selectedVariant.content);
-      setIsEditingVariant(true);
-    } else {
-      setVariantName('');
-      setVariantContent('');
-      setIsEditingVariant(false);
-    }
-  }, [selectedVariant]);
-
   // Track dirty state
   useEffect(() => {
     if (selectedPrompt || isCreating) {
@@ -107,7 +94,7 @@ export default function EditPanel() {
 
   const handleSave = async () => {
     if (!title.trim()) {
-      toast.error('请输入标题');
+      toast.error(t('edit.msg.titleRequired'));
       return;
     }
 
@@ -115,8 +102,7 @@ export default function EditPanel() {
     try {
       if (isCreating) {
         await createPrompt(title, content, remark || undefined, categoryId || undefined);
-        toast.success('Prompt 创建成功');
-        setIsCreating(false);
+        toast.success(t('edit.msg.created'));
       } else if (selectedPrompt) {
         await updatePrompt(
           selectedPrompt.id,
@@ -125,11 +111,12 @@ export default function EditPanel() {
           remark || undefined,
           categoryId || undefined
         );
-        toast.success('保存成功');
+        toast.success(t('edit.msg.saved'));
       }
       isDirtyRef.current = false;
+      handleClose();
     } catch (error) {
-      toast.error('保存失败');
+      toast.error(t('edit.msg.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -144,80 +131,8 @@ export default function EditPanel() {
 
   const handleClose = () => {
     setSelectedPrompt(null);
-    setSelectedVariant(null);
     setIsEditing(false);
     setIsCreating(false);
-  };
-
-  const handleAddVariant = async () => {
-    if (!selectedPrompt || !variantName.trim()) {
-      toast.error('请输入变体名称');
-      return;
-    }
-
-    try {
-      await createVariant(selectedPrompt.id, variantName, variantContent || content);
-      setShowAddVariant(false);
-      setVariantName('');
-      setVariantContent('');
-      toast.success('变体创建成功');
-    } catch (error) {
-      toast.error('创建变体失败');
-    }
-  };
-
-  const handleUpdateVariant = async () => {
-    if (!selectedVariant || !variantName.trim()) {
-      toast.error('请输入变体名称');
-      return;
-    }
-
-    try {
-      await updateVariant(selectedVariant.id, variantName, variantContent);
-      toast.success('变体更新成功');
-    } catch (error) {
-      toast.error('更新变体失败');
-    }
-  };
-
-  const handleDeleteVariant = async (variantId: string) => {
-    if (confirm('确定要删除此变体吗？')) {
-      try {
-        await deleteVariant(variantId);
-        toast.success('变体删除成功');
-      } catch (error) {
-        toast.error('删除变体失败');
-      }
-    }
-  };
-
-  const handleSyncToAllVariants = async () => {
-    if (!selectedPrompt || variants.length === 0) return;
-
-    if (confirm('确定要将当前正文同步到所有变体吗？此操作不可撤销。')) {
-      try {
-        for (const variant of variants) {
-          await updateVariant(variant.id, variant.name, content);
-        }
-        toast.success('已同步到所有变体');
-      } catch (error) {
-        toast.error('同步失败');
-      }
-    }
-  };
-
-  const handleSyncFromMain = async () => {
-    if (!selectedVariant || !selectedPrompt) return;
-
-    if (confirm('确定要从主 Prompt 同步正文吗？当前变体内容将被覆盖。')) {
-      try {
-        await updateVariant(selectedVariant.id, selectedVariant.name, selectedPrompt.content);
-        setVariantContent(selectedPrompt.content);
-        toast.success('已从主 Prompt 同步');
-      } catch (error) {
-        toast.error('同步失败');
-      }
-    }
   };
 
   const handleToggleTag = async (tag: Tag) => {
@@ -233,7 +148,7 @@ export default function EditPanel() {
         setPromptTags([...promptTags, tag]);
       }
     } catch (error) {
-      toast.error('操作失败');
+      toast.error(t('edit.msg.operationFailed'));
     }
   };
 
@@ -249,9 +164,9 @@ export default function EditPanel() {
       }
       setNewTagName('');
       setIsCreatingTag(false);
-      toast.success('标签创建成功');
+      toast.success(t('edit.msg.tagCreated'));
     } catch (error) {
-      toast.error('创建标签失败');
+      toast.error(t('edit.msg.tagCreateFailed'));
     }
   };
 
@@ -264,12 +179,12 @@ export default function EditPanel() {
       {/* Header */}
       <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
         <h2 className="text-white font-medium">
-          {isCreating ? '新建 Prompt' : '编辑 Prompt'}
+          {isCreating ? t('edit.newPrompt') : t('edit.editPrompt')}
         </h2>
         <button
           onClick={handleSaveAndClose}
           className="p-1 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors"
-          title="关闭（自动保存）"
+          title={t('edit.closeTooltip')}
         >
           <X size={20} />
         </button>
@@ -279,36 +194,46 @@ export default function EditPanel() {
       <div className="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-4">
         {/* Title */}
         <div>
-          <label className="block text-sm text-white/70 mb-1">标题</label>
+          <label className="block text-sm text-white/70 mb-1">{t('edit.title')}</label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="输入 Prompt 标题"
+            placeholder={t('edit.titlePlaceholder')}
             className="w-full px-3 py-2 glass-input text-white placeholder-white/50"
           />
         </div>
 
         {/* Category */}
         <div>
-          <label className="block text-sm text-white/70 mb-1">分类</label>
+          <label className="block text-sm text-white/70 mb-1">{t('edit.category')}</label>
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
             className="w-full px-3 py-2 glass-input text-white bg-transparent"
           >
-            <option value="">未分类</option>
-            {categories.map((cat) => (
-              <option key={cat.id} value={cat.id}>
-                {cat.name}
-              </option>
-            ))}
+            <option value="">{t('content.uncategorized')}</option>
+            {(() => {
+              const rootCats = categories.filter(c => !c.parent_id);
+              const result: { id: string; label: string }[] = [];
+              const traverse = (cat: Category) => {
+                result.push({ id: cat.id, label: buildCategoryPath(cat, categories) });
+                const children = categories.filter(c => c.parent_id === cat.id);
+                children.forEach(child => traverse(child));
+              };
+              rootCats.forEach(cat => traverse(cat));
+              return result.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ));
+            })()}
           </select>
         </div>
 
         {/* Tags */}
         <div>
-          <label className="block text-sm text-white/70 mb-1">标签</label>
+          <label className="block text-sm text-white/70 mb-1">{t('edit.tags')}</label>
           <div className="flex flex-wrap gap-2 mb-2">
             {promptTags.map((tag) => (
               <span
@@ -329,7 +254,7 @@ export default function EditPanel() {
               onClick={() => setShowTagSelect(!showTagSelect)}
               className="px-2 py-1 rounded-full text-xs text-white/70 hover:text-white hover:bg-white/10 border border-dashed border-white/30"
             >
-              + 添加标签
+              {t('edit.addTag')}
             </button>
           </div>
 
@@ -362,7 +287,7 @@ export default function EditPanel() {
                       type="text"
                       value={newTagName}
                       onChange={(e) => setNewTagName(e.target.value)}
-                      placeholder="新标签名称"
+                      placeholder={t('edit.newTagName')}
                       className="flex-1 px-2 py-1 glass-input text-white text-xs placeholder-white/50"
                       autoFocus
                       onKeyDown={(e) => {
@@ -379,7 +304,7 @@ export default function EditPanel() {
                     className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-white/50 hover:text-white hover:bg-white/10"
                   >
                     <Plus size={12} />
-                    创建新标签
+                    {t('edit.createTag')}
                   </button>
                 )}
               </div>
@@ -389,11 +314,11 @@ export default function EditPanel() {
 
         {/* Remark */}
         <div>
-          <label className="block text-sm text-white/70 mb-1">备注</label>
+          <label className="block text-sm text-white/70 mb-1">{t('edit.remark')}</label>
           <textarea
             value={remark}
             onChange={(e) => setRemark(e.target.value)}
-            placeholder="添加备注信息"
+            placeholder={t('edit.remarkPlaceholder')}
             rows={2}
             className="w-full px-3 py-2 glass-input text-white placeholder-white/50 resize-none"
           />
@@ -402,189 +327,25 @@ export default function EditPanel() {
         {/* Content */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-sm text-white/70">正文</label>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsPreview(false)}
-                className={`px-2 py-1 text-xs rounded ${
-                  !isPreview ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white'
-                }`}
-              >
-                <Edit2 size={12} className="inline mr-1" />
-                编辑
-              </button>
-              <button
-                onClick={() => setIsPreview(true)}
-                className={`px-2 py-1 text-xs rounded ${
-                  isPreview ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white'
-                }`}
-              >
-                <Eye size={12} className="inline mr-1" />
-                预览
-              </button>
-            </div>
-          </div>
-
-          {isPreview ? (
-            <div className="glass-card p-4 min-h-[200px] markdown-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
-            </div>
-          ) : (
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="输入 Prompt 正文内容"
-              rows={10}
-              className="w-full px-3 py-2 glass-input text-white placeholder-white/50 resize-none font-mono text-sm"
-            />
-          )}
-
-          {!isCreating && variants.length > 0 && (
+            <label className="text-sm text-white/70">{t('edit.content')}</label>
             <button
-              onClick={handleSyncToAllVariants}
-              className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-xs text-white/70 hover:text-white hover:bg-white/10 rounded transition-colors"
+              onClick={() => setIsFullscreenEditing(true)}
+              className="px-2 py-1 text-xs rounded text-white/50 hover:text-white hover:bg-white/10"
+              title={t('edit.fullscreen')}
             >
-              <RefreshCw size={12} />
-              同步至所有变体
+              <Maximize2 size={12} className="inline mr-1" />
+              {t('edit.fullscreen')}
             </button>
-          )}
-        </div>
-
-        {/* Variants */}
-        {!isCreating && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-sm text-white/70">变体</label>
-              {variants.length < 5 && (
-                <button
-                  onClick={() => setShowAddVariant(true)}
-                  className="flex items-center gap-1 px-2 py-1 text-xs text-white/70 hover:text-white hover:bg-white/10 rounded transition-colors"
-                >
-                  <Plus size={12} />
-                  添加变体
-                </button>
-              )}
-            </div>
-
-            {/* Variant tabs */}
-            {variants.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-2">
-                {variants.map((variant) => (
-                  <button
-                    key={variant.id}
-                    onClick={() => setSelectedVariant(variant)}
-                    className={`flex items-center gap-1 px-3 py-1.5 text-xs rounded transition-colors ${
-                      selectedVariant?.id === variant.id
-                        ? 'bg-white/20 text-white'
-                        : 'text-white/70 hover:bg-white/10'
-                    }`}
-                  >
-                    {variant.name}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteVariant(variant.id);
-                      }}
-                      className="hover:bg-white/20 rounded p-0.5"
-                    >
-                      <X size={10} />
-                    </button>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Add variant form */}
-            {showAddVariant && (
-              <div className="glass-card p-3 space-y-2">
-                <input
-                  type="text"
-                  value={variantName}
-                  onChange={(e) => setVariantName(e.target.value)}
-                  placeholder="变体名称"
-                  className="w-full px-3 py-1.5 glass-input text-white placeholder-white/50 text-sm"
-                />
-                <textarea
-                  value={variantContent || content}
-                  onChange={(e) => setVariantContent(e.target.value)}
-                  placeholder="变体正文（默认继承主正文）"
-                  rows={4}
-                  className="w-full px-3 py-1.5 glass-input text-white placeholder-white/50 text-sm resize-none"
-                />
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => {
-                      setShowAddVariant(false);
-                      setVariantName('');
-                      setVariantContent('');
-                    }}
-                    className="px-3 py-1.5 text-xs text-white/70 hover:text-white hover:bg-white/10 rounded"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleAddVariant}
-                    className="px-3 py-1.5 text-xs glass-button text-white"
-                  >
-                    创建
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Edit variant */}
-            {isEditingVariant && selectedVariant && (
-              <div className="glass-card p-3 space-y-2">
-                <input
-                  type="text"
-                  value={variantName}
-                  onChange={(e) => setVariantName(e.target.value)}
-                  placeholder="变体名称"
-                  className="w-full px-3 py-1.5 glass-input text-white placeholder-white/50 text-sm"
-                />
-                <textarea
-                  value={variantContent}
-                  onChange={(e) => setVariantContent(e.target.value)}
-                  placeholder="变体正文"
-                  rows={6}
-                  className="w-full px-3 py-1.5 glass-input text-white placeholder-white/50 text-sm resize-none font-mono"
-                />
-                <div className="flex justify-between">
-                  <button
-                    onClick={handleSyncFromMain}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs text-white/70 hover:text-white hover:bg-white/10 rounded transition-colors"
-                  >
-                    <RefreshCw size={12} />
-                    同步主正文
-                  </button>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        setSelectedVariant(null);
-                        setIsEditingVariant(false);
-                      }}
-                      className="px-3 py-1.5 text-xs text-white/70 hover:text-white hover:bg-white/10 rounded"
-                    >
-                      取消
-                    </button>
-                    <button
-                      onClick={handleUpdateVariant}
-                      className="px-3 py-1.5 text-xs glass-button text-white"
-                    >
-                      保存
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {variants.length === 0 && !showAddVariant && (
-              <p className="text-xs text-white/50 text-center py-4">
-                暂无变体，点击「添加变体」创建
-              </p>
-            )}
           </div>
-        )}
+
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder={t('edit.contentPlaceholder')}
+            rows={10}
+            className="w-full px-3 py-2 glass-input text-white placeholder-white/50 resize-none font-mono text-sm"
+          />
+        </div>
       </div>
 
       {/* Footer */}
@@ -593,7 +354,7 @@ export default function EditPanel() {
           onClick={handleClose}
           className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
         >
-          取消
+          {t('edit.cancel')}
         </button>
         <button
           onClick={handleSave}
@@ -601,7 +362,7 @@ export default function EditPanel() {
           className="flex items-center gap-1.5 px-4 py-2 glass-button text-white text-sm disabled:opacity-50"
         >
           <Save size={16} />
-          {isSaving ? '保存中...' : '保存'}
+          {isSaving ? t('edit.saving') : t('edit.save')}
         </button>
       </div>
     </div>

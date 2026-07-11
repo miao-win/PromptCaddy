@@ -22,13 +22,6 @@ export interface Prompt {
   updated_at: string;
 }
 
-export interface Variant {
-  id: string;
-  prompt_id: string;
-  name: string;
-  content: string;
-}
-
 export interface PromptTag {
   id: number;
   prompt_id: string;
@@ -44,7 +37,6 @@ export interface Snapshot {
 
 export interface SearchResult {
   prompt: Prompt;
-  matched_variant: Variant | null;
   match_source: string;
 }
 
@@ -52,6 +44,5 @@ export interface ExportData {
   categories: Category[];
   tags: Tag[];
   prompts: Prompt[];
-  variants: Variant[];
   prompt_tags: PromptTag[];
 }

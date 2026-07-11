@@ -31,14 +31,6 @@ pub struct Prompt {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Variant {
-    pub id: String,
-    pub prompt_id: String,
-    pub name: String,
-    pub content: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PromptTag {
     pub id: i64,
     pub prompt_id: String,
@@ -56,7 +48,6 @@ pub struct Snapshot {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SearchResult {
     pub prompt: Prompt,
-    pub matched_variant: Option<Variant>,
     pub match_source: String,
 }
 
@@ -99,15 +90,6 @@ impl Database {
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (category_id) REFERENCES categories(id)
-            );
-
-            CREATE TABLE IF NOT EXISTS variants (
-                id TEXT PRIMARY KEY,
-                prompt_id TEXT NOT NULL,
-                name TEXT NOT NULL,
-                content TEXT NOT NULL,
-                FOREIGN KEY (prompt_id) REFERENCES prompts(id) ON DELETE CASCADE,
-                UNIQUE(prompt_id, name)
             );
 
             CREATE TABLE IF NOT EXISTS prompt_tags (
@@ -270,6 +252,28 @@ impl Database {
         Ok(depth)
     }
 
+    /// Returns the given category ID plus all descendant category IDs (BFS).
+    pub fn get_all_descendant_ids(&self, id: &str) -> Result<Vec<String>> {
+        let mut ids = vec![id.to_string()];
+        let mut to_process = vec![id.to_string()];
+
+        while let Some(current_id) = to_process.pop() {
+            let mut stmt = self.conn.prepare(
+                "SELECT id FROM categories WHERE parent_id = ?"
+            )?;
+            let children: Vec<String> = stmt.query_map(params![current_id], |row| {
+                row.get(0)
+            })?.collect::<Result<Vec<_>>>()?;
+
+            for child_id in children {
+                ids.push(child_id.clone());
+                to_process.push(child_id);
+            }
+        }
+
+        Ok(ids)
+    }
+
     // Tags
     pub fn get_tags(&self) -> Result<Vec<Tag>> {
         let mut stmt = self.conn.prepare(
@@ -320,14 +324,21 @@ impl Database {
     // Prompts
     pub fn get_prompts(&self, category_id: Option<&str>, favorites_only: bool) -> Result<Vec<Prompt>> {
         let (sql, query_params): (String, Vec<Box<dyn rusqlite::types::ToSql>>) = match (category_id, favorites_only) {
-            (Some(cid), true) => (
-                "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at FROM prompts WHERE category_id = ?1 AND is_favorite = 1 ORDER BY title ASC".to_string(),
-                vec![Box::new(cid.to_string())],
-            ),
-            (Some(cid), false) => (
-                "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at FROM prompts WHERE category_id = ?1 ORDER BY title ASC".to_string(),
-                vec![Box::new(cid.to_string())],
-            ),
+            (Some(cid), fav) => {
+                // Include prompts from all descendant categories (subtree filtering)
+                let ids = self.get_all_descendant_ids(cid)?;
+                let placeholders: Vec<String> = ids.iter().enumerate().map(|(i, _)| format!("?{}", i + 1)).collect();
+                let in_clause = placeholders.join(", ");
+                let fav_clause = if fav { " AND is_favorite = 1" } else { "" };
+                let sql = format!(
+                    "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at FROM prompts WHERE category_id IN ({}){} ORDER BY title ASC",
+                    in_clause, fav_clause
+                );
+                let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids.into_iter()
+                    .map(|id| Box::new(id) as Box<dyn rusqlite::types::ToSql>)
+                    .collect();
+                (sql, params)
+            },
             (None, true) => (
                 "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at FROM prompts WHERE is_favorite = 1 ORDER BY title ASC".to_string(),
                 vec![],
@@ -429,66 +440,6 @@ impl Database {
         Ok(new_value)
     }
 
-    // Variants
-    pub fn get_variants(&self, prompt_id: &str) -> Result<Vec<Variant>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, prompt_id, name, content FROM variants WHERE prompt_id = ? ORDER BY name"
-        )?;
-
-        let variants = stmt.query_map(params![prompt_id], |row| {
-            Ok(Variant {
-                id: row.get(0)?,
-                prompt_id: row.get(1)?,
-                name: row.get(2)?,
-                content: row.get(3)?,
-            })
-        })?.collect::<Result<Vec<_>>>()?;
-
-        Ok(variants)
-    }
-
-    pub fn create_variant(&self, prompt_id: &str, name: &str, content: &str) -> Result<Variant> {
-        // Check variant limit
-        let count: i32 = self.conn.query_row(
-            "SELECT COUNT(*) FROM variants WHERE prompt_id = ?",
-            params![prompt_id],
-            |row| row.get(0),
-        )?;
-
-        if count >= 5 {
-            return Err(rusqlite::Error::InvalidParameterName("Maximum 5 variants per prompt".to_string()));
-        }
-
-        let id = Uuid::new_v4().to_string();
-        self.conn.execute(
-            "INSERT INTO variants (id, prompt_id, name, content) VALUES (?, ?, ?, ?)",
-            params![id, prompt_id, name, content],
-        )?;
-
-        Ok(Variant {
-            id,
-            prompt_id: prompt_id.to_string(),
-            name: name.to_string(),
-            content: content.to_string(),
-        })
-    }
-
-    pub fn update_variant(&self, id: &str, name: &str, content: &str) -> Result<()> {
-        self.conn.execute(
-            "UPDATE variants SET name = ?, content = ? WHERE id = ?",
-            params![name, content, id],
-        )?;
-        Ok(())
-    }
-
-    pub fn delete_variant(&self, id: &str) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM variants WHERE id = ?",
-            params![id],
-        )?;
-        Ok(())
-    }
-
     // Prompt-Tag relations
     pub fn add_tag_to_prompt(&self, prompt_id: &str, tag_id: &str) -> Result<()> {
         self.conn.execute(
@@ -585,25 +536,14 @@ impl Database {
                 || prompt.content.to_lowercase().contains(&query_lower)
                 || prompt.remark.as_ref().map_or(false, |r| r.to_lowercase().contains(&query_lower));
 
-            // Check variants for matches
-            let variants = self.get_variants(&prompt.id)?;
-            let matched_variant = variants.into_iter().find(|v| {
-                v.content.to_lowercase().contains(&query_lower) ||
-                v.name.to_lowercase().contains(&query_lower)
-            });
-
-            // Prompt match takes priority over variant match
             let match_source = if prompt_matches {
                 "prompt".to_string()
-            } else if matched_variant.is_some() {
-                "variant".to_string()
             } else {
                 "prompt".to_string()
             };
 
             results.push(SearchResult {
                 prompt,
-                matched_variant,
                 match_source,
             });
         }
@@ -638,13 +578,9 @@ impl Database {
         let tags = self.get_tags()?;
         let prompts = self.get_prompts(None, false)?;
 
-        let mut all_variants = Vec::new();
         let mut all_prompt_tags = Vec::new();
 
         for prompt in &prompts {
-            let variants = self.get_variants(&prompt.id)?;
-            all_variants.extend(variants);
-
             let tags = self.get_prompt_tags(&prompt.id)?;
             for tag in tags {
                 all_prompt_tags.push(PromptTag {
@@ -659,7 +595,6 @@ impl Database {
             "categories": categories,
             "tags": tags,
             "prompts": prompts,
-            "variants": all_variants,
             "prompt_tags": all_prompt_tags,
         }).to_string();
 
@@ -695,7 +630,6 @@ impl Database {
 
         // Clear all data
         self.conn.execute("DELETE FROM prompt_tags", [])?;
-        self.conn.execute("DELETE FROM variants", [])?;
         self.conn.execute("DELETE FROM prompts", [])?;
         self.conn.execute("DELETE FROM tags", [])?;
         self.conn.execute("DELETE FROM categories", [])?;
@@ -748,21 +682,6 @@ impl Database {
             }
         }
 
-        // Restore variants
-        if let Some(variants) = data["variants"].as_array() {
-            for variant in variants {
-                self.conn.execute(
-                    "INSERT INTO variants (id, prompt_id, name, content) VALUES (?, ?, ?, ?)",
-                    params![
-                        variant["id"].as_str().unwrap(),
-                        variant["prompt_id"].as_str().unwrap(),
-                        variant["name"].as_str().unwrap(),
-                        variant["content"].as_str().unwrap(),
-                    ],
-                )?;
-            }
-        }
-
         // Restore prompt_tags
         if let Some(prompt_tags) = data["prompt_tags"].as_array() {
             for pt in prompt_tags {
@@ -787,10 +706,14 @@ impl Database {
         Ok(())
     }
 
+    pub fn delete_all_snapshots(&self) -> Result<()> {
+        self.conn.execute("DELETE FROM snapshots", [])?;
+        Ok(())
+    }
+
     // Export
     pub fn clear_all_data(&self) -> Result<()> {
         self.conn.execute("DELETE FROM prompt_tags", [])?;
-        self.conn.execute("DELETE FROM variants", [])?;
         self.conn.execute("DELETE FROM prompts", [])?;
         self.conn.execute("DELETE FROM tags", [])?;
         self.conn.execute("DELETE FROM categories", [])?;
@@ -812,13 +735,9 @@ impl Database {
         let tags = self.get_tags()?;
         let prompts = self.get_prompts(None, false)?;
 
-        let mut all_variants = Vec::new();
         let mut all_prompt_tags = Vec::new();
 
         for prompt in &prompts {
-            let variants = self.get_variants(&prompt.id)?;
-            all_variants.extend(variants);
-
             let tags = self.get_prompt_tags(&prompt.id)?;
             for tag in tags {
                 all_prompt_tags.push(PromptTag {
@@ -833,7 +752,6 @@ impl Database {
             "categories": categories,
             "tags": tags,
             "prompts": prompts,
-            "variants": all_variants,
             "prompt_tags": all_prompt_tags,
         });
 
@@ -842,7 +760,6 @@ impl Database {
 
     pub fn export_prompts_json(&self, prompt_ids: &[String]) -> Result<String> {
         let mut prompts = Vec::new();
-        let mut all_variants = Vec::new();
         let mut all_prompt_tags = Vec::new();
         let mut category_ids = Vec::new();
         let mut tag_ids = Vec::new();
@@ -853,9 +770,6 @@ impl Database {
                 category_ids.push(cid.clone());
             }
             prompts.push(prompt);
-
-            let variants = self.get_variants(id)?;
-            all_variants.extend(variants);
 
             let tags = self.get_prompt_tags(id)?;
             for tag in tags {
@@ -886,7 +800,6 @@ impl Database {
             "categories": categories,
             "tags": tags,
             "prompts": prompts,
-            "variants": all_variants,
             "prompt_tags": all_prompt_tags,
         });
 
@@ -901,7 +814,6 @@ impl Database {
             "overwrite" => {
                 // Clear existing data
                 self.conn.execute("DELETE FROM prompt_tags", [])?;
-                self.conn.execute("DELETE FROM variants", [])?;
                 self.conn.execute("DELETE FROM prompts", [])?;
                 self.conn.execute("DELETE FROM tags", [])?;
                 self.conn.execute("DELETE FROM categories", [])?;
@@ -967,21 +879,6 @@ impl Database {
                         prompt["is_favorite"].as_i64().unwrap() as i32,
                         prompt["created_at"].as_str().unwrap(),
                         prompt["updated_at"].as_str().unwrap(),
-                    ],
-                )?;
-            }
-        }
-
-        // Import variants
-        if let Some(variants) = data["variants"].as_array() {
-            for variant in variants {
-                self.conn.execute(
-                    "INSERT OR REPLACE INTO variants (id, prompt_id, name, content) VALUES (?, ?, ?, ?)",
-                    params![
-                        variant["id"].as_str().unwrap(),
-                        variant["prompt_id"].as_str().unwrap(),
-                        variant["name"].as_str().unwrap(),
-                        variant["content"].as_str().unwrap(),
                     ],
                 )?;
             }
@@ -1076,29 +973,6 @@ impl Database {
             }
         }
 
-        // Import variants if not exists
-        if let Some(variants) = data["variants"].as_array() {
-            for variant in variants {
-                let exists: bool = self.conn.query_row(
-                    "SELECT COUNT(*) > 0 FROM variants WHERE id = ?",
-                    params![variant["id"].as_str().unwrap()],
-                    |row| row.get(0),
-                )?;
-
-                if !exists {
-                    self.conn.execute(
-                        "INSERT INTO variants (id, prompt_id, name, content) VALUES (?, ?, ?, ?)",
-                        params![
-                            variant["id"].as_str().unwrap(),
-                            variant["prompt_id"].as_str().unwrap(),
-                            variant["name"].as_str().unwrap(),
-                            variant["content"].as_str().unwrap(),
-                        ],
-                    )?;
-                }
-            }
-        }
-
         // Import prompt_tags if not exists
         if let Some(prompt_tags) = data["prompt_tags"].as_array() {
             for pt in prompt_tags {
@@ -1180,28 +1054,6 @@ impl Database {
                         prompt["is_favorite"].as_i64().unwrap() as i32,
                         prompt["created_at"].as_str().unwrap(),
                         prompt["updated_at"].as_str().unwrap(),
-                    ],
-                )?;
-            }
-        }
-
-        // Import variants with new IDs
-        if let Some(variants) = data["variants"].as_array() {
-            for variant in variants {
-                let new_id = Uuid::new_v4().to_string();
-
-                let prompt_id = variant["prompt_id"].as_str()
-                    .and_then(|pid| prompt_id_map.get(pid))
-                    .cloned()
-                    .unwrap_or_else(|| variant["prompt_id"].as_str().unwrap().to_string());
-
-                self.conn.execute(
-                    "INSERT INTO variants (id, prompt_id, name, content) VALUES (?, ?, ?, ?)",
-                    params![
-                        new_id,
-                        prompt_id,
-                        variant["name"].as_str().unwrap(),
-                        variant["content"].as_str().unwrap(),
                     ],
                 )?;
             }

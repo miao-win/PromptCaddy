@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { Category, Tag, Prompt, Variant, Snapshot, SearchResult } from '../types';
+import { Category, Tag, Prompt, Snapshot, SearchResult } from '../types';
 
 // Categories
 export const getCategories = (): Promise<Category[]> => invoke('get_categories');
@@ -38,17 +38,6 @@ export const updatePrompt = (id: string, title: string, content: string, remark?
 export const deletePrompt = (id: string): Promise<void> => invoke('delete_prompt', { id });
 
 export const toggleFavorite = (id: string): Promise<number> => invoke('toggle_favorite', { id });
-
-// Variants
-export const getVariants = (promptId: string): Promise<Variant[]> => invoke('get_variants', { promptId });
-
-export const createVariant = (promptId: string, name: string, content: string): Promise<Variant> =>
-  invoke('create_variant', { promptId, name, content });
-
-export const updateVariant = (id: string, name: string, content: string): Promise<void> =>
-  invoke('update_variant', { id, name, content });
-
-export const deleteVariant = (id: string): Promise<void> => invoke('delete_variant', { id });
 
 // Prompt-Tag relations
 export const addTagToPrompt = (promptId: string, tagId: string): Promise<void> =>
@@ -89,3 +78,12 @@ export const exportPromptsCsv = (promptIds: string[]): Promise<string> =>
 
 export const importPromptsJson = (jsonData: string, strategy: string): Promise<void> =>
   invoke('import_prompts_json', { jsonData, strategy });
+
+// Snapshot cleanup
+export const deleteAllSnapshots = (): Promise<void> => invoke('delete_all_snapshots');
+
+// File system
+export const saveFileToPath = (path: string, content: string): Promise<void> =>
+  invoke('save_file_to_path', { path, content });
+
+export const pickDirectory = (): Promise<string | null> => invoke('pick_directory');

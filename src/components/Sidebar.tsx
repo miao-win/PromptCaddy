@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
+import { useTranslation } from '../i18n';
 import { Category } from '../types';
 import * as api from '../api';
-import { ChevronDown, ChevronRight, Plus, Star, Folder, Tag, Settings, Trash2, Edit2, FileDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Star, Folder, Tag, Settings, Trash2, Edit2, FileDown, FolderPlus, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type Page = 'home' | 'tags' | 'settings';
@@ -18,10 +19,21 @@ interface CategoryItemProps {
   expandedCategories: Set<string>;
   onToggleExpand: (id: string) => void;
   onSelect: (id: string) => void;
-  onEdit: (category: Category) => void;
+  onStartRename: (category: Category) => void;
   onDelete: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, category: Category) => void;
+  onCreateSubcategory: (parentId: string) => void;
   selectedCategory: string | null;
+  creatingSubcategoryFor: string | null;
+  subcategoryName: string;
+  onSubcategoryNameChange: (name: string) => void;
+  onConfirmSubcategory: () => void;
+  onCancelSubcategory: () => void;
+  renamingCategory: string | null;
+  renameCategoryName: string;
+  onRenameNameChange: (name: string) => void;
+  onConfirmRename: () => void;
+  onCancelRename: () => void;
 }
 
 function CategoryItem({
@@ -30,20 +42,35 @@ function CategoryItem({
   expandedCategories,
   onToggleExpand,
   onSelect,
-  onEdit,
+  onStartRename,
   onDelete,
   onContextMenu,
+  onCreateSubcategory,
   selectedCategory,
+  creatingSubcategoryFor,
+  subcategoryName,
+  onSubcategoryNameChange,
+  onConfirmSubcategory,
+  onCancelSubcategory,
+  renamingCategory,
+  renameCategoryName,
+  onRenameNameChange,
+  onConfirmRename,
+  onCancelRename,
 }: CategoryItemProps) {
   const { categories } = useStore();
+  const { t } = useTranslation();
   const children = categories.filter((c) => c.parent_id === category.id);
   const isExpanded = expandedCategories.has(category.id);
   const isSelected = selectedCategory === category.id;
+  const isCreatingSub = creatingSubcategoryFor === category.id;
+  const isRenaming = renamingCategory === category.id;
+  const canHaveChildren = level < 2; // max 3 levels (0, 1, 2)
 
   return (
     <div>
       <div
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all ${
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all group ${
           isSelected
             ? 'bg-white/20 text-white'
             : 'hover:bg-white/10 text-white/80'
@@ -52,7 +79,7 @@ function CategoryItem({
         onClick={() => onSelect(category.id)}
         onContextMenu={(e) => onContextMenu(e, category)}
       >
-        {children.length > 0 ? (
+        {children.length > 0 || isCreatingSub ? (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -60,7 +87,7 @@ function CategoryItem({
             }}
             className="p-0.5 hover:bg-white/20 rounded"
           >
-            {isExpanded ? (
+            {isExpanded || isCreatingSub ? (
               <ChevronDown size={14} />
             ) : (
               <ChevronRight size={14} />
@@ -73,13 +100,26 @@ function CategoryItem({
         <Folder size={16} className="flex-shrink-0" />
         <span className="flex-1 truncate text-sm">{category.name}</span>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          {canHaveChildren && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCreateSubcategory(category.id);
+              }}
+              className="p-1 hover:bg-white/20 rounded"
+              title={t('sidebar.newSubcategory')}
+            >
+              <Plus size={12} />
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onEdit(category);
+              onStartRename(category);
             }}
             className="p-1 hover:bg-white/20 rounded"
+            title={t('sidebar.rename')}
           >
             <Edit2 size={12} />
           </button>
@@ -89,13 +129,82 @@ function CategoryItem({
               onDelete(category.id);
             }}
             className="p-1 hover:bg-white/20 rounded"
+            title={t('sidebar.deleteCategory')}
           >
             <Trash2 size={12} />
           </button>
         </div>
       </div>
 
-      {isExpanded && children.length > 0 && (
+      {/* Inline rename input */}
+      {isRenaming && (
+        <div className="px-3 py-1" style={{ paddingLeft: `${level * 16 + 12 + 20}px` }}>
+          <div className="flex items-center gap-1">
+            <input
+              type="text"
+              value={renameCategoryName}
+              onChange={(e) => onRenameNameChange(e.target.value)}
+              placeholder={t('sidebar.categoryName')}
+              className="flex-1 px-2 py-1 glass-input text-sm"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onConfirmRename();
+                if (e.key === 'Escape') onCancelRename();
+              }}
+              onBlur={() => {
+                if (!renameCategoryName.trim()) {
+                  onCancelRename();
+                }
+              }}
+            />
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onConfirmRename();
+              }}
+              className="p-1 hover:bg-green-500/20 rounded text-green-400"
+              title={t('sidebar.confirm')}
+            >
+              <Check size={12} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancelRename();
+              }}
+              className="p-1 hover:bg-red-500/20 rounded text-red-400"
+              title={t('sidebar.cancel')}
+            >
+              <X size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Subcategory creation input */}
+      {isCreatingSub && (
+        <div className="px-3 py-1" style={{ paddingLeft: `${(level + 1) * 16 + 12}px` }}>
+          <input
+            type="text"
+            value={subcategoryName}
+            onChange={(e) => onSubcategoryNameChange(e.target.value)}
+            placeholder={t('sidebar.subcategoryName')}
+            className="w-full px-3 py-1.5 glass-input text-sm"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onConfirmSubcategory();
+              if (e.key === 'Escape') onCancelSubcategory();
+            }}
+            onBlur={() => {
+              if (!subcategoryName.trim()) {
+                onCancelSubcategory();
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {(isExpanded || isCreatingSub || isRenaming) && children.length > 0 && (
         <div>
           {children.map((child) => (
             <CategoryItem
@@ -105,10 +214,21 @@ function CategoryItem({
               expandedCategories={expandedCategories}
               onToggleExpand={onToggleExpand}
               onSelect={onSelect}
-              onEdit={onEdit}
+              onStartRename={onStartRename}
               onDelete={onDelete}
               onContextMenu={onContextMenu}
+              onCreateSubcategory={onCreateSubcategory}
               selectedCategory={selectedCategory}
+              creatingSubcategoryFor={creatingSubcategoryFor}
+              subcategoryName={subcategoryName}
+              onSubcategoryNameChange={onSubcategoryNameChange}
+              onConfirmSubcategory={onConfirmSubcategory}
+              onCancelSubcategory={onCancelSubcategory}
+              renamingCategory={renamingCategory}
+              renameCategoryName={renameCategoryName}
+              onRenameNameChange={onRenameNameChange}
+              onConfirmRename={onConfirmRename}
+              onCancelRename={onCancelRename}
             />
           ))}
         </div>
@@ -130,13 +250,16 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
     loadPrompts,
   } = useStore();
 
+  const { t } = useTranslation();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
-  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
-  const [editCategoryName, setEditCategoryName] = useState('');
+  const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
+  const [renameCategoryName, setRenameCategoryName] = useState('');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; category: Category } | null>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const [creatingSubcategoryFor, setCreatingSubcategoryFor] = useState<string | null>(null);
+  const [subcategoryName, setSubcategoryName] = useState('');
 
   const rootCategories = categories.filter((c) => !c.parent_id);
 
@@ -164,34 +287,37 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
     try {
       const prompts = await api.getPrompts(category.id);
       if (prompts.length === 0) {
-        toast.error('该分类下没有 Prompt');
+        toast.error(t('sidebar.msg.noPromptInCategory'));
         return;
       }
       const ids = prompts.map((p) => p.id);
       const jsonData = await api.exportPromptsJson(ids);
-      const blob = new Blob([jsonData], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${category.name}_export_${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success(`已导出 ${ids.length} 个 Prompt`);
+      // Use configured export path
+      const saved = localStorage.getItem('prompt-caddy-settings');
+      let exportPath = 'D:\\downloads';
+      if (saved) {
+        try {
+          const settings = JSON.parse(saved);
+          if (settings.exportPath) exportPath = settings.exportPath;
+        } catch {}
+      }
+      const filename = `${category.name}_export_${new Date().toISOString().slice(0, 10)}.json`;
+      const fullPath = `${exportPath}\\${filename}`.replace(/\\\\/g, '\\');
+      await api.saveFileToPath(fullPath, jsonData);
+      toast.success(t('sidebar.msg.exportedTo', { path: fullPath }));
     } catch (error) {
-      toast.error('导出失败');
+      toast.error(t('sidebar.msg.exportFailed', { error: String(error) }));
     }
   };
 
   const handleDeleteCategoryWithConfirm = async (category: Category) => {
     setContextMenu(null);
-    if (confirm(`确定要删除分类「${category.name}」吗？分类下的 Prompt 将变为未分类状态。`)) {
+    if (confirm(t('sidebar.confirm.deleteCategory', { name: category.name }))) {
       try {
         await deleteCategory(category.id);
-        toast.success('分类删除成功');
+        toast.success(t('sidebar.msg.deleteSuccess'));
       } catch (error) {
-        toast.error('删除分类失败');
+        toast.error(t('sidebar.msg.deleteFailed'));
       }
     }
   };
@@ -213,32 +339,46 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
       await createCategory(newCategoryName.trim());
       setNewCategoryName('');
       setIsCreatingCategory(false);
-      toast.success('分类创建成功');
+      toast.success(t('sidebar.msg.categoryCreated'));
     } catch (error) {
-      toast.error('创建分类失败');
+      toast.error(t('sidebar.msg.categoryCreateFailed'));
     }
   };
 
-  const handleUpdateCategory = async () => {
-    if (!editingCategory || !editCategoryName.trim()) return;
+  const handleStartRename = (category: Category) => {
+    setRenamingCategory(category.id);
+    setRenameCategoryName(category.name);
+    // Auto-expand the category to show children
+    const newExpanded = new Set(expandedCategories);
+    newExpanded.add(category.id);
+    setExpandedCategories(newExpanded);
+  };
+
+  const handleConfirmRename = async () => {
+    if (!renamingCategory || !renameCategoryName.trim()) return;
 
     try {
-      await updateCategory(editingCategory.id, editCategoryName.trim());
-      setEditingCategory(null);
-      setEditCategoryName('');
-      toast.success('分类更新成功');
+      await updateCategory(renamingCategory, renameCategoryName.trim());
+      setRenamingCategory(null);
+      setRenameCategoryName('');
+      toast.success(t('sidebar.msg.nameUpdated'));
     } catch (error) {
-      toast.error('更新分类失败');
+      toast.error(t('sidebar.msg.updateFailed'));
     }
+  };
+
+  const handleCancelRename = () => {
+    setRenamingCategory(null);
+    setRenameCategoryName('');
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (confirm('确定要删除此分类吗？分类下的Prompt将变为未分类状态。')) {
+    if (confirm(t('sidebar.confirm.deleteCategorySimple'))) {
       try {
         await deleteCategory(id);
-        toast.success('分类删除成功');
+        toast.success(t('sidebar.msg.deleteSuccess'));
       } catch (error) {
-        toast.error('删除分类失败');
+        toast.error(t('sidebar.msg.deleteFailed'));
       }
     }
   };
@@ -246,6 +386,32 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   const handleSelectCategory = (id: string) => {
     setSelectedCategory(id);
     onPageChange('home');
+  };
+
+  const handleCreateSubcategory = (parentId: string) => {
+    setCreatingSubcategoryFor(parentId);
+    setSubcategoryName('');
+    // Auto-expand the parent
+    const newExpanded = new Set(expandedCategories);
+    newExpanded.add(parentId);
+    setExpandedCategories(newExpanded);
+  };
+
+  const handleConfirmSubcategory = async () => {
+    if (!creatingSubcategoryFor || !subcategoryName.trim()) return;
+    try {
+      await createCategory(subcategoryName.trim(), creatingSubcategoryFor);
+      setSubcategoryName('');
+      setCreatingSubcategoryFor(null);
+      toast.success(t('sidebar.msg.subcategoryCreated'));
+    } catch (error) {
+      toast.error(t('sidebar.msg.subcategoryCreateFailed'));
+    }
+  };
+
+  const handleCancelSubcategory = () => {
+    setCreatingSubcategoryFor(null);
+    setSubcategoryName('');
   };
 
   const handleSelectAll = () => {
@@ -263,7 +429,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
       {/* Logo */}
       <div className="p-4 border-b border-white/10">
         <h1 className="text-xl font-bold text-white">Prompt Caddy</h1>
-        <p className="text-xs text-white/60 mt-1">Prompt 管理工具</p>
+        <p className="text-xs text-white/60 mt-1">{t('sidebar.appTitle')}</p>
       </div>
 
       {/* Quick access */}
@@ -280,7 +446,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           }`}
         >
           <Folder size={18} />
-          <span className="text-sm">全部 Prompt</span>
+          <span className="text-sm">{t('sidebar.allPrompts')}</span>
         </button>
 
         <button
@@ -295,14 +461,14 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           }`}
         >
           <Star size={18} />
-          <span className="text-sm">我的收藏</span>
+          <span className="text-sm">{t('sidebar.favorites')}</span>
         </button>
       </div>
 
       {/* Categories */}
       <div className="flex-1 overflow-y-auto scrollbar-thin p-2">
         <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-xs font-semibold text-white/60 uppercase">分类</span>
+          <span className="text-xs font-semibold text-white/60 uppercase">{t('sidebar.categories')}</span>
           <button
             onClick={() => setIsCreatingCategory(true)}
             className="p-1 hover:bg-white/20 rounded text-white/60 hover:text-white"
@@ -317,7 +483,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
               type="text"
               value={newCategoryName}
               onChange={(e) => setNewCategoryName(e.target.value)}
-              placeholder="分类名称"
+              placeholder={t('sidebar.categoryName')}
               className="w-full px-3 py-1.5 glass-input text-sm"
               autoFocus
               onKeyDown={(e) => {
@@ -336,31 +502,6 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           </div>
         )}
 
-        {editingCategory && (
-          <div className="px-3 py-2">
-            <input
-              type="text"
-              value={editCategoryName}
-              onChange={(e) => setEditCategoryName(e.target.value)}
-              placeholder="分类名称"
-              className="w-full px-3 py-1.5 glass-input text-sm"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleUpdateCategory();
-                if (e.key === 'Escape') {
-                  setEditingCategory(null);
-                  setEditCategoryName('');
-                }
-              }}
-              onBlur={() => {
-                if (!editCategoryName.trim()) {
-                  setEditingCategory(null);
-                }
-              }}
-            />
-          </div>
-        )}
-
         {rootCategories.map((category) => (
           <CategoryItem
             key={category.id}
@@ -369,13 +510,21 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
             expandedCategories={expandedCategories}
             onToggleExpand={toggleExpand}
             onSelect={handleSelectCategory}
-            onEdit={(cat) => {
-              setEditingCategory(cat);
-              setEditCategoryName(cat.name);
-            }}
+            onStartRename={handleStartRename}
             onDelete={handleDeleteCategory}
             onContextMenu={handleCategoryContextMenu}
+            onCreateSubcategory={handleCreateSubcategory}
             selectedCategory={selectedCategory}
+            creatingSubcategoryFor={creatingSubcategoryFor}
+            subcategoryName={subcategoryName}
+            onSubcategoryNameChange={setSubcategoryName}
+            onConfirmSubcategory={handleConfirmSubcategory}
+            onCancelSubcategory={handleCancelSubcategory}
+            renamingCategory={renamingCategory}
+            renameCategoryName={renameCategoryName}
+            onRenameNameChange={setRenameCategoryName}
+            onConfirmRename={handleConfirmRename}
+            onCancelRename={handleCancelRename}
           />
         ))}
       </div>
@@ -391,7 +540,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           }`}
         >
           <Tag size={18} />
-          <span className="text-sm">标签管理</span>
+          <span className="text-sm">{t('sidebar.tagManagement')}</span>
         </button>
 
         <button
@@ -403,7 +552,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           }`}
         >
           <Settings size={18} />
-          <span className="text-sm">设置</span>
+          <span className="text-sm">{t('sidebar.settings')}</span>
         </button>
       </div>
 
@@ -414,19 +563,51 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           className="fixed z-[100] glass-card py-1 min-w-[140px] animate-fade-in"
           style={{ left: contextMenu.x, top: contextMenu.y }}
         >
+          {/* Only show "create subcategory" if depth allows (max 3 levels) */}
+          {(() => {
+            // Calculate depth of the clicked category
+            let depth = 1;
+            let current: Category | undefined = contextMenu.category;
+            while (current?.parent_id) {
+              depth++;
+              current = categories.find(c => c.id === current!.parent_id);
+            }
+            return depth < 3;
+          })() && (
+            <button
+              onClick={() => {
+                setContextMenu(null);
+                handleCreateSubcategory(contextMenu.category.id);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <FolderPlus size={14} />
+              {t('sidebar.createSubcategory')}
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setContextMenu(null);
+              handleStartRename(contextMenu.category);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            <Edit2 size={14} />
+            {t('sidebar.rename')}
+          </button>
           <button
             onClick={() => handleExportCategory(contextMenu.category)}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors"
           >
             <FileDown size={14} />
-            导出分类
+            {t('sidebar.exportCategory')}
           </button>
           <button
             onClick={() => handleDeleteCategoryWithConfirm(contextMenu.category)}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-white/10 hover:text-red-300 transition-colors"
           >
             <Trash2 size={14} />
-            删除分类
+            {t('sidebar.deleteCategory')}
           </button>
         </div>
       )}

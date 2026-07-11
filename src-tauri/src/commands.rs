@@ -1,6 +1,6 @@
 use tauri::State;
 use crate::AppState;
-use crate::db::{Category, Tag, Prompt, Variant, Snapshot, SearchResult};
+use crate::db::{Category, Tag, Prompt, Snapshot, SearchResult};
 
 // Categories
 #[tauri::command]
@@ -89,31 +89,6 @@ pub fn toggle_favorite(state: State<AppState>, id: String) -> Result<i32, String
     db.toggle_favorite(&id).map_err(|e| e.to_string())
 }
 
-// Variants
-#[tauri::command]
-pub fn get_variants(state: State<AppState>, prompt_id: String) -> Result<Vec<Variant>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.get_variants(&prompt_id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn create_variant(state: State<AppState>, prompt_id: String, name: String, content: String) -> Result<Variant, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.create_variant(&prompt_id, &name, &content).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn update_variant(state: State<AppState>, id: String, name: String, content: String) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.update_variant(&id, &name, &content).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn delete_variant(state: State<AppState>, id: String) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.delete_variant(&id).map_err(|e| e.to_string())
-}
-
 // Prompt-Tag relations
 #[tauri::command]
 pub fn add_tag_to_prompt(state: State<AppState>, prompt_id: String, tag_id: String) -> Result<(), String> {
@@ -196,19 +171,9 @@ pub fn export_prompts_markdown(state: State<AppState>, prompt_ids: Vec<String>) 
 
     for id in &prompt_ids {
         let prompt = db.get_prompt_by_id(id).map_err(|e| e.to_string())?;
-        let variants = db.get_variants(id).map_err(|e| e.to_string())?;
-
-        if variants.is_empty() {
-            let filename = format!("{}.md", prompt.title);
-            let content = format!("# {}\n\n{}", prompt.title, prompt.content);
-            files.push((filename, content));
-        } else {
-            for variant in &variants {
-                let filename = format!("{}_{}.md", prompt.title, variant.name);
-                let content = format!("# {} - {}\n\n{}", prompt.title, variant.name, variant.content);
-                files.push((filename, content));
-            }
-        }
+        let filename = format!("{}.md", prompt.title);
+        let content = format!("# {}\n\n{}", prompt.title, prompt.content);
+        files.push((filename, content));
     }
 
     Ok(files)
@@ -227,11 +192,10 @@ fn csv_escape(value: &str) -> String {
 #[tauri::command]
 pub fn export_prompts_csv(state: State<AppState>, prompt_ids: Vec<String>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut csv = String::from("Prompt标题,变体名称,正文,分类,标签\n");
+    let mut csv = String::from("标题,正文,分类,标签\n");
 
     for id in &prompt_ids {
         let prompt = db.get_prompt_by_id(id).map_err(|e| e.to_string())?;
-        let variants = db.get_variants(id).map_err(|e| e.to_string())?;
         let tags = db.get_prompt_tags(id).map_err(|e| e.to_string())?;
 
         let category_name = if let Some(cid) = &prompt.category_id {
@@ -244,25 +208,12 @@ pub fn export_prompts_csv(state: State<AppState>, prompt_ids: Vec<String>) -> Re
         let tag_names: Vec<String> = tags.iter().map(|t| t.name.clone()).collect();
         let tags_str = tag_names.join("; ");
 
-        if variants.is_empty() {
-            csv.push_str(&format!("{},{},{},{},{}\n",
-                csv_escape(&prompt.title),
-                csv_escape(""),
-                csv_escape(&prompt.content),
-                csv_escape(&category_name),
-                csv_escape(&tags_str)
-            ));
-        } else {
-            for variant in &variants {
-                csv.push_str(&format!("{},{},{},{},{}\n",
-                    csv_escape(&prompt.title),
-                    csv_escape(&variant.name),
-                    csv_escape(&variant.content),
-                    csv_escape(&category_name),
-                    csv_escape(&tags_str)
-                ));
-            }
-        }
+        csv.push_str(&format!("{},{},{},{}\n",
+            csv_escape(&prompt.title),
+            csv_escape(&prompt.content),
+            csv_escape(&category_name),
+            csv_escape(&tags_str)
+        ));
     }
 
     Ok(csv)
@@ -272,4 +223,32 @@ pub fn export_prompts_csv(state: State<AppState>, prompt_ids: Vec<String>) -> Re
 pub fn import_prompts_json(state: State<AppState>, json_data: String, strategy: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.import_json(&json_data, &strategy).map_err(|e| e.to_string())
+}
+
+// Snapshot cleanup
+#[tauri::command]
+pub fn delete_all_snapshots(state: State<AppState>) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.delete_all_snapshots().map_err(|e| e.to_string())
+}
+
+// File system operations
+#[tauri::command]
+pub fn save_file_to_path(path: String, content: String) -> Result<(), String> {
+    // Ensure parent directory exists
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("无法创建目录: {}", e))?;
+    }
+    std::fs::write(&path, content).map_err(|e| format!("无法写入文件: {}", e))
+}
+
+#[tauri::command]
+pub async fn pick_directory(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    use std::sync::mpsc;
+    let (tx, rx) = mpsc::channel();
+    app.dialog().file().pick_folder(move |folder| {
+        let _ = tx.send(folder.map(|f| f.to_string()));
+    });
+    rx.recv().map_err(|e| format!("对话框错误: {}", e))
 }

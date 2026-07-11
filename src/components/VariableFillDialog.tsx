@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 import { X, Copy } from 'lucide-react';
 
 interface VariableFillDialogProps {
@@ -8,6 +9,7 @@ interface VariableFillDialogProps {
 }
 
 export default function VariableFillDialog({ content, onCopy, onClose }: VariableFillDialogProps) {
+  const { t } = useTranslation();
   const [variables, setVariables] = useState<Map<string, string>>(new Map());
   const [filledContent, setFilledContent] = useState('');
 
@@ -70,7 +72,7 @@ export default function VariableFillDialog({ content, onCopy, onClose }: Variabl
       >
         {/* Header */}
         <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-          <h3 className="text-white font-medium">填充变量</h3>
+          <h3 className="text-white font-medium">{t('variable.title')}</h3>
           <button
             onClick={onClose}
             className="p-1 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors"
@@ -82,7 +84,7 @@ export default function VariableFillDialog({ content, onCopy, onClose }: Variabl
         {/* Variables form */}
         <div className="p-4 max-h-96 overflow-y-auto scrollbar-thin">
           <p className="text-sm text-white/70 mb-4">
-            检测到以下变量，请填写对应的值：
+            {t('variable.description')}
           </p>
 
           <div className="space-y-3">
@@ -95,7 +97,7 @@ export default function VariableFillDialog({ content, onCopy, onClose }: Variabl
                   type="text"
                   value={value}
                   onChange={(e) => handleVariableChange(name, e.target.value)}
-                  placeholder={`输入 ${name} 的值`}
+                  placeholder={t('variable.placeholder', { name })}
                   className="w-full px-3 py-2 glass-input text-white placeholder-white/50"
                   autoFocus={Array.from(variables.keys())[0] === name}
                 />
@@ -105,7 +107,7 @@ export default function VariableFillDialog({ content, onCopy, onClose }: Variabl
 
           {/* Preview */}
           <div className="mt-4">
-            <p className="text-sm text-white/70 mb-2">预览：</p>
+            <p className="text-sm text-white/70 mb-2">{t('variable.preview')}</p>
             <div className="glass-card p-3 max-h-40 overflow-y-auto scrollbar-thin">
               <pre className="text-xs text-white/80 whitespace-pre-wrap font-mono">
                 {filledContent}
@@ -117,14 +119,14 @@ export default function VariableFillDialog({ content, onCopy, onClose }: Variabl
         {/* Footer */}
         <div className="px-4 py-3 border-t border-white/10 flex justify-between items-center">
           <p className="text-xs text-white/50">
-            Ctrl+Enter 快速复制
+            {t('variable.shortcutHint')}
           </p>
           <div className="flex gap-2">
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
             >
-              取消
+              {t('variable.cancel')}
             </button>
             <button
               onClick={handleCopy}
@@ -132,7 +134,7 @@ export default function VariableFillDialog({ content, onCopy, onClose }: Variabl
               className="flex items-center gap-1.5 px-4 py-2 glass-button text-white text-sm disabled:opacity-50"
             >
               <Copy size={16} />
-              确认复制
+              {t('variable.confirmCopy')}
             </button>
           </div>
         </div>

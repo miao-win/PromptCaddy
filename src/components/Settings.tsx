@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useStore } from '../store';
+import { useTranslation, Language } from '../i18n';
 import { Snapshot } from '../types';
 import * as api from '../api';
 import {
@@ -15,15 +16,17 @@ import {
   RefreshCw,
   Clock,
   Plus,
+  FolderOpen,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type SettingsTab = 'general' | 'data' | 'shortcuts' | 'appearance';
 
 interface AppSettings {
-  language: 'zh' | 'en';
+  language: Language;
   startupBehavior: 'all' | 'last';
   defaultExportFormat: 'json' | 'markdown' | 'csv';
+  exportPath: string;
   theme: 'light' | 'dark' | 'system';
   cardDensity: 'compact' | 'standard' | 'relaxed';
   glassIntensity: number;
@@ -32,9 +35,10 @@ interface AppSettings {
 const SETTINGS_KEY = 'prompt-caddy-settings';
 
 const defaultSettings: AppSettings = {
-  language: 'zh',
+  language: 'zh-CN',
   startupBehavior: 'all',
   defaultExportFormat: 'json',
+  exportPath: 'D:\\downloads',
   theme: 'light',
   cardDensity: 'standard',
   glassIntensity: 50,
@@ -44,7 +48,10 @@ function loadSettings(): AppSettings {
   try {
     const saved = localStorage.getItem(SETTINGS_KEY);
     if (saved) {
-      return { ...defaultSettings, ...JSON.parse(saved) };
+      const parsed = JSON.parse(saved);
+      // Migrate old 'zh' value to 'zh-CN'
+      if (parsed.language === 'zh') parsed.language = 'zh-CN';
+      return { ...defaultSettings, ...parsed };
     }
   } catch (e) {
     console.error('Failed to load settings:', e);
@@ -87,6 +94,7 @@ export default function Settings() {
     loadPrompts,
   } = useStore();
 
+  const { t, setLanguage } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
   const [snapshotName, setSnapshotName] = useState('');
@@ -110,13 +118,17 @@ export default function Settings() {
     if (partial.glassIntensity !== undefined) {
       applyGlassIntensity(partial.glassIntensity);
     }
+    // Apply language immediately
+    if (partial.language !== undefined) {
+      setLanguage(partial.language);
+    }
   };
 
   const tabs = [
-    { id: 'general' as SettingsTab, label: '通用设置', icon: Globe },
-    { id: 'data' as SettingsTab, label: '数据管理', icon: Database },
-    { id: 'shortcuts' as SettingsTab, label: '快捷键设置', icon: Keyboard },
-    { id: 'appearance' as SettingsTab, label: '外观设置', icon: Palette },
+    { id: 'general' as SettingsTab, label: t('settings.general'), icon: Globe },
+    { id: 'data' as SettingsTab, label: t('settings.data'), icon: Database },
+    { id: 'shortcuts' as SettingsTab, label: t('settings.shortcuts'), icon: Keyboard },
+    { id: 'appearance' as SettingsTab, label: t('settings.appearance'), icon: Palette },
   ];
 
   const handleCreateSnapshot = async () => {
@@ -124,34 +136,34 @@ export default function Settings() {
       await createSnapshot(snapshotName || undefined);
       setSnapshotName('');
       setShowCreateSnapshot(false);
-      toast.success('快照创建成功');
+      toast.success(t('settings.msg.snapshotCreated'));
     } catch (error) {
-      toast.error('创建快照失败');
+      toast.error(t('settings.msg.snapshotCreateFailed'));
     }
   };
 
   const handleRestoreSnapshot = async (snapshot: Snapshot) => {
     if (
       confirm(
-        `确定要回退到快照「${snapshot.name || '启动快照'}」吗？当前未保存的编辑内容将永久丢失，无法撤销。`
+        t('settings.confirm.restoreSnapshot', { name: snapshot.name || t('settings.snapshotDefault') })
       )
     ) {
       try {
         await restoreSnapshot(snapshot.id);
-        toast.success('快照回退成功');
+        toast.success(t('settings.msg.snapshotRestored'));
       } catch (error) {
-        toast.error('回退快照失败');
+        toast.error(t('settings.msg.snapshotRestoreFailed'));
       }
     }
   };
 
   const handleDeleteSnapshot = async (snapshot: Snapshot) => {
-    if (confirm(`确定要删除快照「${snapshot.name || '启动快照'}」吗？`)) {
+    if (confirm(t('settings.confirm.deleteSnapshot', { name: snapshot.name || t('settings.snapshotDefault') }))) {
       try {
         await deleteSnapshot(snapshot.id);
-        toast.success('快照删除成功');
+        toast.success(t('settings.msg.snapshotDeleted'));
       } catch (error) {
-        toast.error('删除快照失败');
+        toast.error(t('settings.msg.snapshotDeleteFailed'));
       }
     }
   };
@@ -159,18 +171,13 @@ export default function Settings() {
   const handleExportAll = async () => {
     try {
       const jsonData = await api.exportPromptsJson([]);
-      const blob = new Blob([jsonData], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `prompt_caddy_export_${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success('全量导出成功');
+      const exportPath = settings.exportPath || defaultSettings.exportPath;
+      const filename = `prompt_caddy_export_${new Date().toISOString().slice(0, 10)}.json`;
+      const fullPath = `${exportPath}\\${filename}`.replace(/\\\\/g, '\\');
+      await api.saveFileToPath(fullPath, jsonData);
+      toast.success(t('settings.msg.exportedTo', { path: fullPath }));
     } catch (error) {
-      toast.error('导出失败');
+      toast.error(t('settings.msg.exportFailed', { error: String(error) }));
     }
   };
 
@@ -190,7 +197,7 @@ export default function Settings() {
             // Validate JSON
             JSON.parse(jsonData);
 
-            const strategy = window.confirm('是否覆盖现有数据？\n\n确定 = 覆盖\n取消 = 跳过重复')
+            const strategy = window.confirm(t('settings.confirm.importOverwrite'))
               ? 'overwrite'
               : 'skip';
 
@@ -198,31 +205,27 @@ export default function Settings() {
             await loadCategories();
             await loadTags();
             await loadPrompts();
-            toast.success('导入成功');
+            toast.success(t('settings.msg.importSuccess'));
           } catch (error) {
-            toast.error('导入失败：文件格式错误');
+            toast.error(t('settings.msg.importFailed'));
           }
         };
         reader.readAsText(file);
       };
       input.click();
     } catch (error) {
-      toast.error('导入失败');
+      toast.error(t('settings.msg.importFailedGeneric'));
     }
   };
 
   const handleClearData = async () => {
-    if (
-      confirm(
-        '确定要清空所有数据吗？此操作不可恢复，所有 Prompt、分类、标签数据将被永久删除。'
-      )
-    ) {
-      if (confirm('再次确认：此操作不可撤销，确定继续吗？')) {
+    if (confirm(t('settings.confirm.clearData'))) {
+      if (confirm(t('settings.confirm.clearDataAgain'))) {
         try {
           await clearAllData();
-          toast.success('数据已清空');
+          toast.success(t('settings.msg.dataCleared'));
         } catch (error) {
-          toast.error('清空数据失败');
+          toast.error(t('settings.msg.clearDataFailed'));
         }
       }
     }
@@ -231,12 +234,12 @@ export default function Settings() {
   const renderGeneralSettings = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="text-white font-medium mb-3">界面语言</h3>
+        <h3 className="text-white font-medium mb-3">{t('settings.language')}</h3>
         <div className="flex gap-2">
           <button
-            onClick={() => updateSettings({ language: 'zh' })}
+            onClick={() => updateSettings({ language: 'zh-CN' })}
             className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-              settings.language === 'zh'
+              settings.language === 'zh-CN'
                 ? 'bg-white/20 text-white'
                 : 'text-white/70 hover:bg-white/10'
             }`}
@@ -257,7 +260,7 @@ export default function Settings() {
       </div>
 
       <div>
-        <h3 className="text-white font-medium mb-3">启动行为</h3>
+        <h3 className="text-white font-medium mb-3">{t('settings.startupBehavior')}</h3>
         <div className="flex gap-2">
           <button
             onClick={() => updateSettings({ startupBehavior: 'all' })}
@@ -267,7 +270,7 @@ export default function Settings() {
                 : 'text-white/70 hover:bg-white/10'
             }`}
           >
-            全部 Prompt
+            {t('settings.startupAll')}
           </button>
           <button
             onClick={() => updateSettings({ startupBehavior: 'last' })}
@@ -277,13 +280,13 @@ export default function Settings() {
                 : 'text-white/70 hover:bg-white/10'
             }`}
           >
-            上次退出位置
+            {t('settings.startupLast')}
           </button>
         </div>
       </div>
 
       <div>
-        <h3 className="text-white font-medium mb-3">默认导出格式</h3>
+        <h3 className="text-white font-medium mb-3">{t('settings.exportFormat')}</h3>
         <div className="flex gap-2">
           {(['json', 'markdown', 'csv'] as const).map((format) => (
             <button
@@ -303,37 +306,69 @@ export default function Settings() {
     </div>
   );
 
+  const handleBrowseExportPath = async () => {
+    try {
+      const selected = await api.pickDirectory();
+      if (selected) {
+        updateSettings({ exportPath: selected });
+      }
+    } catch (error) {
+      toast.error(t('settings.msg.browseFailed'));
+    }
+  };
+
   const renderDataSettings = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="text-white font-medium mb-3">数据导出与导入</h3>
+        <h3 className="text-white font-medium mb-3">{t('settings.exportPath')}</h3>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={settings.exportPath}
+            onChange={(e) => updateSettings({ exportPath: e.target.value })}
+            placeholder="D:\downloads"
+            className="flex-1 px-3 py-2 glass-input text-white placeholder-white/50 text-sm"
+          />
+          <button
+            onClick={handleBrowseExportPath}
+            className="flex items-center gap-1.5 px-3 py-2 glass-button text-white text-sm flex-shrink-0"
+          >
+            <FolderOpen size={16} />
+            {t('settings.browse')}
+          </button>
+        </div>
+        <p className="text-xs text-white/50 mt-1">{t('settings.exportPathHint')}</p>
+      </div>
+
+      <div>
+        <h3 className="text-white font-medium mb-3">{t('settings.dataExportImport')}</h3>
         <div className="flex gap-2">
           <button
             onClick={handleExportAll}
             className="flex items-center gap-1.5 px-4 py-2 glass-button text-white text-sm"
           >
             <Download size={16} />
-            全量导出
+            {t('settings.exportAll')}
           </button>
           <button
             onClick={handleImport}
             className="flex items-center gap-1.5 px-4 py-2 glass-button text-white text-sm"
           >
             <Upload size={16} />
-            全量导入
+            {t('settings.importAll')}
           </button>
         </div>
       </div>
 
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-white font-medium">快照管理</h3>
+          <h3 className="text-white font-medium">{t('settings.snapshotManagement')}</h3>
           <button
             onClick={() => setShowCreateSnapshot(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 glass-button text-white text-sm"
           >
             <Plus size={14} />
-            保存当前快照
+            {t('settings.saveSnapshot')}
           </button>
         </div>
 
@@ -343,7 +378,7 @@ export default function Settings() {
               type="text"
               value={snapshotName}
               onChange={(e) => setSnapshotName(e.target.value)}
-              placeholder="快照名称（可选）"
+              placeholder={t('settings.snapshotName')}
               className="w-full px-3 py-2 glass-input text-white placeholder-white/50 mb-2"
               autoFocus
               onKeyDown={(e) => {
@@ -356,14 +391,14 @@ export default function Settings() {
                 onClick={() => setShowCreateSnapshot(false)}
                 className="px-3 py-1.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded"
               >
-                取消
+                {t('sidebar.cancel')}
               </button>
               <button
                 onClick={handleCreateSnapshot}
                 className="flex items-center gap-1.5 px-3 py-1.5 glass-button text-white text-sm"
               >
                 <Save size={14} />
-                保存
+                {t('edit.save')}
               </button>
             </div>
           </div>
@@ -377,7 +412,7 @@ export default function Settings() {
                   <Clock size={16} className="text-white/60" />
                   <div>
                     <p className="text-white text-sm">
-                      {snapshot.name || '启动快照'}
+                      {snapshot.name || t('settings.snapshotDefault')}
                     </p>
                     <p className="text-xs text-white/50">
                       {new Date(snapshot.created_at).toLocaleString()}
@@ -388,14 +423,14 @@ export default function Settings() {
                   <button
                     onClick={() => handleRestoreSnapshot(snapshot)}
                     className="p-2 hover:bg-white/10 rounded text-white/60 hover:text-white transition-colors"
-                    title="回退至此版本"
+                    title={t('settings.restoreSnapshot')}
                   >
                     <RefreshCw size={16} />
                   </button>
                   <button
                     onClick={() => handleDeleteSnapshot(snapshot)}
                     className="p-2 hover:bg-white/10 rounded text-white/60 hover:text-red-400 transition-colors"
-                    title="删除快照"
+                    title={t('settings.deleteSnapshot')}
                   >
                     <Trash2 size={16} />
                   </button>
@@ -406,40 +441,40 @@ export default function Settings() {
 
           {snapshots.length === 0 && (
             <div className="text-center py-8 text-white/50">
-              <p>暂无快照</p>
+              <p>{t('settings.noSnapshot')}</p>
             </div>
           )}
         </div>
       </div>
 
       <div>
-        <h3 className="text-white font-medium mb-3 text-red-400">危险操作</h3>
+        <h3 className="text-white font-medium mb-3 text-red-400">{t('settings.dangerous')}</h3>
         <button
           onClick={handleClearData}
           className="flex items-center gap-1.5 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg text-sm transition-colors"
         >
           <Trash2 size={16} />
-          清空所有数据
+          {t('settings.clearAllData')}
         </button>
-        <p className="text-xs text-white/50 mt-1">此操作不可恢复，请谨慎操作</p>
+        <p className="text-xs text-white/50 mt-1">{t('settings.clearDataHint')}</p>
       </div>
     </div>
   );
 
   const renderShortcutsSettings = () => {
     const shortcuts = [
-      { key: 'Ctrl+F', action: '聚焦搜索框' },
-      { key: 'Ctrl+N', action: '新建 Prompt' },
-      { key: 'Ctrl+C', action: '快速复制（选中卡片时）' },
-      { key: 'Ctrl+A', action: '全选/退出多选' },
-      { key: 'Ctrl+S', action: '手动保存快照' },
-      { key: 'ESC', action: '关闭面板/取消操作' },
+      { key: 'Ctrl+F', action: t('settings.shortcut.focusSearch') },
+      { key: 'Ctrl+N', action: t('settings.shortcut.newPrompt') },
+      { key: 'Ctrl+C', action: t('settings.shortcut.quickCopy') },
+      { key: 'Ctrl+A', action: t('settings.shortcut.selectAll') },
+      { key: 'Ctrl+S', action: t('settings.shortcut.saveSnapshot') },
+      { key: 'ESC', action: t('settings.shortcut.closePanel') },
     ];
 
     return (
       <div className="space-y-6">
         <div>
-          <h3 className="text-white font-medium mb-3">全局快捷键</h3>
+          <h3 className="text-white font-medium mb-3">{t('settings.globalShortcuts')}</h3>
           <div className="space-y-2">
             {shortcuts.map((shortcut) => (
               <div
@@ -461,35 +496,35 @@ export default function Settings() {
   const renderAppearanceSettings = () => (
     <div className="space-y-6">
       <div>
-        <h3 className="text-white font-medium mb-3">主题模式</h3>
+        <h3 className="text-white font-medium mb-3">{t('settings.theme')}</h3>
         <div className="flex gap-2">
           {([
-            { id: 'light' as const, label: '浅色' },
-            { id: 'dark' as const, label: '深色' },
-            { id: 'system' as const, label: '跟随系统' },
-          ]).map((t) => (
+            { id: 'light' as const, label: t('settings.themeLight') },
+            { id: 'dark' as const, label: t('settings.themeDark') },
+            { id: 'system' as const, label: t('settings.themeSystem') },
+          ]).map((th) => (
             <button
-              key={t.id}
-              onClick={() => updateSettings({ theme: t.id })}
+              key={th.id}
+              onClick={() => updateSettings({ theme: th.id })}
               className={`px-4 py-2 rounded-lg text-sm transition-colors ${
-                settings.theme === t.id
+                settings.theme === th.id
                   ? 'bg-white/20 text-white'
                   : 'text-white/70 hover:bg-white/10'
               }`}
             >
-              {t.label}
+              {th.label}
             </button>
           ))}
         </div>
       </div>
 
       <div>
-        <h3 className="text-white font-medium mb-3">卡片密度</h3>
+        <h3 className="text-white font-medium mb-3">{t('settings.cardDensity')}</h3>
         <div className="flex gap-2">
           {([
-            { id: 'compact' as const, label: '紧凑' },
-            { id: 'standard' as const, label: '标准' },
-            { id: 'relaxed' as const, label: '宽松' },
+            { id: 'compact' as const, label: t('settings.densityCompact') },
+            { id: 'standard' as const, label: t('settings.densityStandard') },
+            { id: 'relaxed' as const, label: t('settings.densityRelaxed') },
           ]).map((d) => (
             <button
               key={d.id}
@@ -507,7 +542,7 @@ export default function Settings() {
       </div>
 
       <div>
-        <h3 className="text-white font-medium mb-3">玻璃效果强度</h3>
+        <h3 className="text-white font-medium mb-3">{t('settings.glassIntensity')}</h3>
         <div className="glass-card p-4">
           <input
             type="range"
@@ -518,9 +553,9 @@ export default function Settings() {
             className="w-full accent-white"
           />
           <div className="flex justify-between mt-2 text-xs text-white/50">
-            <span>弱</span>
+            <span>{t('settings.glassWeak')}</span>
             <span>{settings.glassIntensity}%</span>
-            <span>强</span>
+            <span>{t('settings.glassStrong')}</span>
           </div>
         </div>
       </div>
@@ -545,7 +580,7 @@ export default function Settings() {
       {/* Header */}
       <div className="px-6 py-4 border-b border-white/10 flex items-center gap-3">
         <SettingsIcon size={24} className="text-white" />
-        <h1 className="text-xl font-bold text-white">设置</h1>
+        <h1 className="text-xl font-bold text-white">{t('settings.title')}</h1>
       </div>
 
       {/* Content */}
