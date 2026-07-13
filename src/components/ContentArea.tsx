@@ -22,7 +22,11 @@ function buildCategoryPath(cat: Category, categories: Category[]): string {
   return parts.join(' - ');
 }
 
-export default function ContentArea() {
+interface ContentAreaProps {
+  onPromptFocus?: (promptId: string | null) => void;
+}
+
+export default function ContentArea({ onPromptFocus }: ContentAreaProps) {
   const {
     prompts,
     searchResults,
@@ -311,6 +315,7 @@ export default function ContentArea() {
                 prompt={prompt}
                 isSelected={selectedPrompts.has(prompt.id)}
                 isMultiSelectMode={isMultiSelectMode}
+                onFocus={onPromptFocus}
               />
             ))}
           </div>

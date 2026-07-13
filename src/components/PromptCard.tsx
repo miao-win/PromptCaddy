@@ -11,6 +11,7 @@ interface PromptCardProps {
   prompt: Prompt;
   isSelected?: boolean;
   isMultiSelectMode?: boolean;
+  onFocus?: (promptId: string | null) => void;
 }
 
 /** Build the full category path string like "Parent - Child" */
@@ -26,7 +27,7 @@ function buildCategoryPath(cat: Category, categories: Category[]): string {
   return parts.join(' - ');
 }
 
-export default function PromptCard({ prompt, isSelected = false, isMultiSelectMode = false }: PromptCardProps) {
+export default function PromptCard({ prompt, isSelected = false, isMultiSelectMode = false, onFocus }: PromptCardProps) {
   const {
     setSelectedPrompt,
     toggleFavorite,
@@ -155,6 +156,7 @@ export default function PromptCard({ prompt, isSelected = false, isMultiSelectMo
   };
 
   const handleCardClick = () => {
+    onFocus?.(prompt.id);
     if (isMultiSelectMode) {
       togglePromptSelection(prompt.id);
     } else {

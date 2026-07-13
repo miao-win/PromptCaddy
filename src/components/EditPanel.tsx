@@ -21,6 +21,7 @@ function buildCategoryPath(cat: Category, categories: Category[]): string {
 export default function EditPanel() {
   const {
     selectedPrompt,
+    selectedCategory,
     tags,
     categories,
     isEditing,
@@ -70,12 +71,13 @@ export default function EditPanel() {
       };
       isDirtyRef.current = false;
     } else if (isCreating) {
+      const defaultCategoryId = selectedCategory || '';
       setTitle('');
       setContent('');
       setRemark('');
-      setCategoryId('');
+      setCategoryId(defaultCategoryId);
       setPromptTags([]);
-      initialDataRef.current = { title: '', content: '', remark: '', categoryId: '' };
+      initialDataRef.current = { title: '', content: '', remark: '', categoryId: defaultCategoryId };
       isDirtyRef.current = false;
     }
   }, [selectedPrompt, isCreating]);
@@ -330,8 +332,9 @@ export default function EditPanel() {
             <label className="text-sm text-white/70">{t('edit.content')}</label>
             <button
               onClick={() => setIsFullscreenEditing(true)}
-              className="px-2 py-1 text-xs rounded text-white/50 hover:text-white hover:bg-white/10"
-              title={t('edit.fullscreen')}
+              disabled={!selectedPrompt}
+              className="px-2 py-1 text-xs rounded text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
+              title={selectedPrompt ? t('edit.fullscreen') : t('edit.fullscreenDisabled')}
             >
               <Maximize2 size={12} className="inline mr-1" />
               {t('edit.fullscreen')}

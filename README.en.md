@@ -6,7 +6,7 @@
 
 # Prompt Caddy
 
-A lightweight, fully localized desktop Prompt management tool designed for non-technical users to efficiently create, categorize, search, and reuse AI prompts in daily workflows.
+A lightweight, fully localized desktop Prompt management tool designed for everyone to efficiently create, categorize, search, and reuse AI prompts in daily workflows.
 
 ## Tech Stack
 
@@ -28,6 +28,7 @@ A lightweight, fully localized desktop Prompt management tool designed for non-t
 - ✅ Batch operations (multi-select, batch delete, batch export)
 - ✅ Full snapshot (startup snapshot, manual snapshot, one-click rollback)
 - ✅ Import/Export (JSON, Markdown, CSV)
+- ✅ About page (click the app title to view usage guide)
 
 ### UI Features
 - ✅ iOS Liquid Glass design style
@@ -51,20 +52,27 @@ PromptCaddy/
 │   ├── api/                  # API wrappers
 │   │   └── index.ts
 │   ├── components/           # React components
-│   │   ├── App.tsx
-│   │   ├── Sidebar.tsx
-│   │   ├── ContentArea.tsx
-│   │   ├── EditPanel.tsx
-│   │   ├── PromptCard.tsx
-│   │   ├── SearchBar.tsx
-│   │   ├── TagManagement.tsx
-│   │   ├── Settings.tsx
-│   │   ├── VariableFillDialog.tsx
-│   │   └── Toaster.tsx
+│   │   ├── App.tsx           # App root + global shortcuts
+│   │   ├── Sidebar.tsx       # Sidebar navigation
+│   │   ├── ContentArea.tsx   # Main content area
+│   │   ├── EditPanel.tsx     # Edit panel
+│   │   ├── FullscreenEditor.tsx # Fullscreen editor
+│   │   ├── PromptCard.tsx    # Prompt card
+│   │   ├── SearchBar.tsx     # Search bar
+│   │   ├── AboutPage.tsx     # About / usage guide
+│   │   ├── TagManagement.tsx # Tag management
+│   │   ├── Settings.tsx      # Settings page
+│   │   ├── VariableFillDialog.tsx # Variable fill dialog
+│   │   └── Toaster.tsx       # Toast notifications
 │   ├── store/                # Zustand state management
 │   │   └── index.ts
 │   ├── types/                # TypeScript type definitions
 │   │   └── index.ts
+│   ├── i18n/                 # Internationalization
+│   │   ├── index.ts
+│   │   └── locales/
+│   │       ├── zh-CN.ts
+│   │       └── en.ts
 │   ├── main.tsx              # Frontend entry
 │   └── index.css             # Global styles
 ├── package.json
@@ -119,12 +127,22 @@ All data is stored locally in a SQLite database. File locations:
 
 | Shortcut | Function |
 |----------|----------|
-| `Ctrl+F` | Focus search bar |
 | `Ctrl+N` | New Prompt |
-| `Ctrl+C` | Quick copy (when card is selected) |
-| `Ctrl+A` | Select all / Exit multi-select |
+| `Ctrl+C` | Quick copy selected card content |
+| `Ctrl+F` | Focus search bar |
+| `Ctrl+A` | Select all / Exit multi-select mode |
 | `Ctrl+S` | Save manual snapshot |
-| `ESC` | Close panel / Cancel operation |
+| `ESC` | Close panel / Cancel operation (closes in priority order) |
+
+> **Note**: `Ctrl+C` only activates when no text is selected and focus is not in an input field, so it won't interfere with the system default copy behavior.
+
+## Tips
+
+- **Variable Placeholders**: Use `{{variable}}` format in prompt content — a fill dialog will appear when copying
+- **Right-Click Menu**: Right-click on categories or cards to access more actions (create subcategory, move category, export, etc.)
+- **Category Management**: Supports up to 3 levels of tree-structured categories, created via sidebar `+` button or right-click menu
+- **Snapshot Restore**: A snapshot is auto-created on every launch. You can manually create snapshots or restore to history in Settings
+- **About Page**: Click the "Prompt Caddy" title in the top-left corner to view the app introduction and usage guide
 
 ## License
 

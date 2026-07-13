@@ -28,6 +28,7 @@
 - ✅ 批量操作（多选、批量删除、批量导出）
 - ✅ 全体快照（启动快照、手动快照、一键回退）
 - ✅ 导入导出（JSON、Markdown、CSV）
+- ✅ 软件介绍页（点击左上角标题即可查看）
 
 ### 界面特性
 - ✅ iOS 液态玻璃（Liquid Glass）设计风格
@@ -51,20 +52,27 @@ PromptCaddy/
 │   ├── api/                  # API 调用封装
 │   │   └── index.ts
 │   ├── components/           # React 组件
-│   │   ├── App.tsx
-│   │   ├── Sidebar.tsx
-│   │   ├── ContentArea.tsx
-│   │   ├── EditPanel.tsx
-│   │   ├── PromptCard.tsx
-│   │   ├── SearchBar.tsx
-│   │   ├── TagManagement.tsx
-│   │   ├── Settings.tsx
-│   │   ├── VariableFillDialog.tsx
-│   │   └── Toaster.tsx
+│   │   ├── App.tsx           # 应用主组件 + 全局快捷键
+│   │   ├── Sidebar.tsx       # 侧边栏导航
+│   │   ├── ContentArea.tsx   # 主内容区域
+│   │   ├── EditPanel.tsx     # 编辑面板
+│   │   ├── FullscreenEditor.tsx # 全屏编辑器
+│   │   ├── PromptCard.tsx    # Prompt 卡片
+│   │   ├── SearchBar.tsx     # 搜索栏
+│   │   ├── AboutPage.tsx     # 软件介绍页
+│   │   ├── TagManagement.tsx # 标签管理
+│   │   ├── Settings.tsx      # 设置页
+│   │   ├── VariableFillDialog.tsx # 变量填充对话框
+│   │   └── Toaster.tsx       # Toast 通知
 │   ├── store/                # Zustand 状态管理
 │   │   └── index.ts
 │   ├── types/                # TypeScript 类型定义
 │   │   └── index.ts
+│   ├── i18n/                 # 国际化
+│   │   ├── index.ts
+│   │   └── locales/
+│   │       ├── zh-CN.ts
+│   │       └── en.ts
 │   ├── main.tsx              # 前端入口
 │   └── index.css             # 全局样式
 ├── package.json
@@ -119,12 +127,22 @@ npm run tauri build
 
 | 快捷键 | 功能 |
 |--------|------|
-| `Ctrl+F` | 聚焦搜索框 |
 | `Ctrl+N` | 新建 Prompt |
-| `Ctrl+C` | 快速复制（选中卡片时） |
-| `Ctrl+A` | 全选/退出多选 |
+| `Ctrl+C` | 快速复制选中卡片内容 |
+| `Ctrl+F` | 聚焦搜索框 |
+| `Ctrl+A` | 全选/退出多选模式 |
 | `Ctrl+S` | 手动保存快照 |
-| `ESC` | 关闭面板/取消操作 |
+| `ESC` | 关闭面板/取消操作（按优先级依次关闭） |
+
+> **注意**: `Ctrl+C` 仅在未选中文本且非输入框聚焦时生效，不会影响系统默认复制行为。
+
+## 使用技巧
+
+- **变量占位符**: 在 Prompt 正文中使用 `{{变量名}}` 格式，复制时会弹出填写对话框
+- **右键菜单**: 右键点击分类或卡片可以展开更多操作（创建子分类、移动分类、导出等）
+- **分类管理**: 支持最多 3 层树状分类，通过侧边栏 `+` 按钮或右键菜单创建
+- **快照回退**: 每次启动自动创建快照，可在设置中手动创建或回退到历史版本
+- **软件介绍**: 点击左上角「Prompt Caddy」标题可查看软件介绍和使用指南
 
 ## 许可证
 

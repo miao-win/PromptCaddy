@@ -6,11 +6,12 @@ import * as api from '../api';
 import { ChevronDown, ChevronRight, Plus, Star, Folder, Tag, Settings, Trash2, Edit2, FileDown, FolderPlus, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-type Page = 'home' | 'tags' | 'settings';
+type Page = 'home' | 'tags' | 'settings' | 'about';
 
 interface SidebarProps {
   currentPage: Page;
   onPageChange: (page: Page) => void;
+  onActiveViewChange?: (view: 'all' | 'favorites' | 'category') => void;
 }
 
 interface CategoryItemProps {
@@ -151,11 +152,6 @@ function CategoryItem({
                 if (e.key === 'Enter') onConfirmRename();
                 if (e.key === 'Escape') onCancelRename();
               }}
-              onBlur={() => {
-                if (!renameCategoryName.trim()) {
-                  onCancelRename();
-                }
-              }}
             />
             <button
               onClick={(e) => {
@@ -195,11 +191,6 @@ function CategoryItem({
               if (e.key === 'Enter') onConfirmSubcategory();
               if (e.key === 'Escape') onCancelSubcategory();
             }}
-            onBlur={() => {
-              if (!subcategoryName.trim()) {
-                onCancelSubcategory();
-              }
-            }}
           />
         </div>
       )}
@@ -237,11 +228,10 @@ function CategoryItem({
   );
 }
 
-export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
+export default function Sidebar({ currentPage, onPageChange, onActiveViewChange }: SidebarProps) {
   const {
     categories,
     selectedCategory,
-    isFavoritesOnly,
     setSelectedCategory,
     setIsFavoritesOnly,
     createCategory,
@@ -260,8 +250,24 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const [creatingSubcategoryFor, setCreatingSubcategoryFor] = useState<string | null>(null);
   const [subcategoryName, setSubcategoryName] = useState('');
+  const [activeView, setActiveView] = useState<'all' | 'favorites' | 'category'>('all');
 
   const rootCategories = categories.filter((c) => !c.parent_id);
+
+  // Listen for activeView sync from App (e.g. ESC key)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const view = (e as CustomEvent).detail;
+      setActiveView(view);
+    };
+    window.addEventListener('sidebar-active-view', handler);
+    return () => window.removeEventListener('sidebar-active-view', handler);
+  }, []);
+
+  // Notify parent when activeView changes
+  useEffect(() => {
+    onActiveViewChange?.(activeView);
+  }, [activeView, onActiveViewChange]);
 
   // Close context menu on click outside
   useEffect(() => {
@@ -385,6 +391,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
 
   const handleSelectCategory = (id: string) => {
     setSelectedCategory(id);
+    setActiveView('category');
     onPageChange('home');
   };
 
@@ -417,20 +424,27 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   const handleSelectAll = () => {
     setSelectedCategory(null);
     setIsFavoritesOnly(false);
+    setActiveView('all');
     loadPrompts();
   };
 
   const handleSelectFavorites = () => {
     setIsFavoritesOnly(true);
+    setActiveView('favorites');
   };
 
   return (
     <div className="w-60 glass-effect flex flex-col border-r border-white/10">
       {/* Logo */}
-      <div className="p-4 border-b border-white/10">
+      <button
+        onClick={() => onPageChange('about')}
+        className={`w-full p-4 border-b border-white/10 text-left transition-all ${
+          currentPage === 'about' ? 'bg-white/15' : 'hover:bg-white/10'
+        }`}
+      >
         <h1 className="text-xl font-bold text-white">Prompt Caddy</h1>
         <p className="text-xs text-white/60 mt-1">{t('sidebar.appTitle')}</p>
-      </div>
+      </button>
 
       {/* Quick access */}
       <div className="p-2 border-b border-white/10">
@@ -440,7 +454,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
             onPageChange('home');
           }}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-            currentPage === 'home' && !selectedCategory && !isFavoritesOnly
+            activeView === 'all'
               ? 'bg-white/20 text-white'
               : 'hover:bg-white/10 text-white/80'
           }`}
@@ -455,7 +469,7 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
             onPageChange('home');
           }}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-            currentPage === 'home' && isFavoritesOnly
+            activeView === 'favorites'
               ? 'bg-white/20 text-white'
               : 'hover:bg-white/10 text-white/80'
           }`}
@@ -491,11 +505,6 @@ export default function Sidebar({ currentPage, onPageChange }: SidebarProps) {
                 if (e.key === 'Escape') {
                   setIsCreatingCategory(false);
                   setNewCategoryName('');
-                }
-              }}
-              onBlur={() => {
-                if (!newCategoryName.trim()) {
-                  setIsCreatingCategory(false);
                 }
               }}
             />

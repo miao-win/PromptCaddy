@@ -6,7 +6,7 @@
 
 # Prompt Caddy
 
-一款輕量、完全本地化的桌面端 Prompt 管理工具，主要面向非電腦專業背景的使用者高效地建立、分類、檢索和複用日常使用的 AI 提示詞。
+一款輕量、完全本地化的桌面端 Prompt 管理工具，面向所有使用者高效地建立、分類、檢索和複用日常使用的 AI 提示詞。
 
 ## 技術棧
 
@@ -28,6 +28,7 @@
 - ✅ 批次操作（多選、批次刪除、批次匯出）
 - ✅ 全體快照（啟動快照、手動快照、一鍵復原）
 - ✅ 匯入匯出（JSON、Markdown、CSV）
+- ✅ 軟體介紹頁（點擊左上角標題即可查看）
 
 ### 介面特色
 - ✅ iOS 液態玻璃（Liquid Glass）設計風格
@@ -51,20 +52,27 @@ PromptCaddy/
 │   ├── api/                  # API 呼叫封裝
 │   │   └── index.ts
 │   ├── components/           # React 元件
-│   │   ├── App.tsx
-│   │   ├── Sidebar.tsx
-│   │   ├── ContentArea.tsx
-│   │   ├── EditPanel.tsx
-│   │   ├── PromptCard.tsx
-│   │   ├── SearchBar.tsx
-│   │   ├── TagManagement.tsx
-│   │   ├── Settings.tsx
-│   │   ├── VariableFillDialog.tsx
-│   │   └── Toaster.tsx
+│   │   ├── App.tsx           # 應用主元件 + 全域快速鍵
+│   │   ├── Sidebar.tsx       # 側邊欄導航
+│   │   ├── ContentArea.tsx   # 主內容區域
+│   │   ├── EditPanel.tsx     # 編輯面板
+│   │   ├── FullscreenEditor.tsx # 全螢幕編輯器
+│   │   ├── PromptCard.tsx    # Prompt 卡片
+│   │   ├── SearchBar.tsx     # 搜尋欄
+│   │   ├── AboutPage.tsx     # 軟體介紹頁
+│   │   ├── TagManagement.tsx # 標籤管理
+│   │   ├── Settings.tsx      # 設定頁
+│   │   ├── VariableFillDialog.tsx # 變數填充對話框
+│   │   └── Toaster.tsx       # Toast 通知
 │   ├── store/                # Zustand 狀態管理
 │   │   └── index.ts
 │   ├── types/                # TypeScript 型別定義
 │   │   └── index.ts
+│   ├── i18n/                 # 國際化
+│   │   ├── index.ts
+│   │   └── locales/
+│   │       ├── zh-CN.ts
+│   │       └── en.ts
 │   ├── main.tsx              # 前端入口
 │   └── index.css             # 全域樣式
 ├── package.json
@@ -119,12 +127,22 @@ npm run tauri build
 
 | 快速鍵 | 功能 |
 |--------|------|
-| `Ctrl+F` | 聚焦搜尋框 |
 | `Ctrl+N` | 新建 Prompt |
-| `Ctrl+C` | 快速複製（選中卡片時） |
-| `Ctrl+A` | 全選/退出多選 |
+| `Ctrl+C` | 快速複製選中卡片內容 |
+| `Ctrl+F` | 聚焦搜尋框 |
+| `Ctrl+A` | 全選/退出多選模式 |
 | `Ctrl+S` | 手動儲存快照 |
-| `ESC` | 關閉面板/取消操作 |
+| `ESC` | 關閉面板/取消操作（按優先順序依序關閉） |
+
+> **注意**: `Ctrl+C` 僅在未選中文字且非輸入框聚焦時生效，不會影響系統預設複製行為。
+
+## 使用技巧
+
+- **變數佔位符**: 在 Prompt 正文中使用 `{{變數名}}` 格式的佔位符，複製時會彈出填寫對話框
+- **右鍵選單**: 右鍵點擊分類或卡片可以展開更多操作（建立子分類、移動分類、匯出等）
+- **分類管理**: 支援最多 3 層樹狀分類，透過側邊欄 `+` 按鈕或右鍵選單建立
+- **快照復原**: 每次啟動會自動建立快照，可在設定中手動建立或復原到歷史版本
+- **軟體介紹**: 點擊左上角「Prompt Caddy」標題可查看軟體介紹和使用指南
 
 ## 授權條款
 
