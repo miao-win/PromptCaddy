@@ -5,6 +5,7 @@ import { Tag } from '../types';
 import { X, Plus, Save, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getFlatCategoryList } from '../utils/category';
+import { getTagColorClass } from '../utils/tagColors';
 
 export default function EditPanel() {
   const {
@@ -144,7 +145,7 @@ export default function EditPanel() {
   const handleCreateTagInline = async () => {
     if (!newTagName.trim()) return;
     try {
-      const newTag = await createTag(newTagName.trim(), '#888888');
+      const newTag = await createTag(newTagName.trim());
       if (selectedPrompt) {
         await addTagToPrompt(selectedPrompt.id, newTag.id);
         setPromptTags([...promptTags, newTag]);
@@ -215,7 +216,7 @@ export default function EditPanel() {
             {promptTags.map((tag) => (
               <span
                 key={tag.id}
-                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white bg-white/15"
+                className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${getTagColorClass(tag.name)}`}
               >
                 {tag.name}
                 <button

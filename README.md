@@ -1,8 +1,6 @@
-<div align="center">
-
-**简体中文** · [English](./README.en.md) · [繁體中文](./README.zh-TW.md)
-
-</div>
+<p align="center">
+  <a href="./README.md">简体中文</a> | <a href="./README.en.md">English</a> | <a href="./README.zh-TW.md">繁體中文</a>
+</p>
 
 # Prompt Caddy
 
@@ -15,19 +13,24 @@
 - **数据库**: SQLite (本地存储)
 - **状态管理**: Zustand
 - **UI 组件**: Lucide React Icons
+- **拖拽交互**: @dnd-kit
 - **Markdown**: React Markdown + Remark GFM
+- **代码高亮**: React Syntax Highlighter
+- **Toast 通知**: React Hot Toast
 
 ## 功能特性
 
 ### 核心功能
 - ✅ Prompt 创建、编辑、删除
-- ✅ 树状分类管理（最多 3 层）
-- ✅ 标签管理（创建、编辑、删除、颜色自定义）
+- ✅ 树状分类管理（最多 3 层，支持置顶）
+- ✅ 标签管理（创建、编辑、删除，支持颜色标记）
+- ✅ Prompt 收藏功能
 - ✅ 快速复制（支持变量占位符填充）
 - ✅ 全文搜索（FTS5 引擎）
+- ✅ 拖拽分类（拖拽 Prompt 到分类修改分类，支持分类拖拽排序）
 - ✅ 批量操作（多选、批量删除、批量导出）
-- ✅ 全体快照（启动快照、手动快照、一键回退）
-- ✅ 导入导出（JSON、Markdown、CSV）
+- ✅ 全体快照（启动快照、定时自动保存、手动快照、一键回退）
+- ✅ 导入导出（JSON、Markdown、CSV，导出前确认）
 - ✅ 软件介绍页（点击左上角标题即可查看）
 
 ### 界面特性
@@ -52,12 +55,12 @@ PromptCaddy/
 │   ├── api/                  # API 调用封装
 │   │   └── index.ts
 │   ├── components/           # React 组件
-│   │   ├── App.tsx           # 应用主组件 + 全局快捷键
 │   │   ├── Sidebar.tsx       # 侧边栏导航
 │   │   ├── ContentArea.tsx   # 主内容区域
 │   │   ├── EditPanel.tsx     # 编辑面板
 │   │   ├── FullscreenEditor.tsx # 全屏编辑器
 │   │   ├── PromptCard.tsx    # Prompt 卡片
+│   │   ├── DraggablePromptCard.tsx # 可拖拽的 Prompt 卡片
 │   │   ├── SearchBar.tsx     # 搜索栏
 │   │   ├── AboutPage.tsx     # 软件介绍页
 │   │   ├── TagManagement.tsx # 标签管理
@@ -73,6 +76,16 @@ PromptCaddy/
 │   │   └── locales/
 │   │       ├── zh-CN.ts
 │   │       └── en.ts
+│   ├── utils/                # 工具函数
+│   │   ├── category.ts       # 分类工具
+│   │   ├── date.ts           # 日期工具
+│   │   ├── export.ts         # 导出工具
+│   │   ├── exportPath.ts     # 导出路径工具
+│   │   ├── highlight.tsx     # 搜索高亮
+│   │   ├── shortcuts.ts      # 快捷键定义
+│   │   ├── tagColors.ts      # 标签颜色
+│   │   └── theme.ts          # 主题工具
+│   ├── App.tsx               # 应用主组件 + 全局快捷键
 │   ├── main.tsx              # 前端入口
 │   └── index.css             # 全局样式
 ├── package.json
@@ -128,20 +141,19 @@ npm run tauri build
 | 快捷键 | 功能 |
 |--------|------|
 | `Ctrl+N` | 新建 Prompt |
-| `Ctrl+C` | 快速复制选中卡片内容 |
-| `Ctrl+F` | 聚焦搜索框 |
+| `Ctrl+C` | 快速复制当前聚焦卡片内容 |
 | `Ctrl+A` | 全选/退出多选模式 |
 | `Ctrl+S` | 手动保存快照 |
 | `ESC` | 关闭面板/取消操作（按优先级依次关闭） |
 
-> **注意**: `Ctrl+C` 仅在未选中文本且非输入框聚焦时生效，不会影响系统默认复制行为。
+> **注意**: `Ctrl+C` 仅在鼠标悬停于卡片上且未选中文本、非输入框聚焦时生效，不会影响系统默认复制行为。
 
 ## 使用技巧
 
 - **变量占位符**: 在 Prompt 正文中使用 `{{变量名}}` 格式，复制时会弹出填写对话框
 - **右键菜单**: 右键点击分类或卡片可以展开更多操作（创建子分类、移动分类、导出等）
 - **分类管理**: 支持最多 3 层树状分类，通过侧边栏 `+` 按钮或右键菜单创建
-- **快照回退**: 每次启动自动创建快照，可在设置中手动创建或回退到历史版本
+- **快照回退**: 每次启动自动创建快照并清除历史快照，按设定间隔定时保存（默认 10 分钟，可选 1/5/10 分钟）。可在设置中手动创建或回退到历史版本
 - **软件介绍**: 点击左上角「Prompt Caddy」标题可查看软件介绍和使用指南
 
 ## 其他

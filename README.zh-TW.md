@@ -1,8 +1,6 @@
-<div align="center">
-
-[简体中文](./README.md) · [English](./README.en.md) · **繁體中文**
-
-</div>
+<p align="center">
+  <a href="./README.md">简体中文</a> | <a href="./README.en.md">English</a> | <a href="./README.zh-TW.md">繁體中文</a>
+</p>
 
 # Prompt Caddy
 
@@ -15,19 +13,24 @@
 - **資料庫**: SQLite (本地儲存)
 - **狀態管理**: Zustand
 - **UI 元件**: Lucide React Icons
+- **拖曳互動**: @dnd-kit
 - **Markdown**: React Markdown + Remark GFM
+- **程式碼高亮**: React Syntax Highlighter
+- **Toast 通知**: React Hot Toast
 
 ## 功能特色
 
 ### 核心功能
 - ✅ Prompt 建立、編輯、刪除
-- ✅ 樹狀分類管理（最多 3 層）
-- ✅ 標籤管理（建立、編輯、刪除、顏色自訂）
+- ✅ 樹狀分類管理（最多 3 層，支援釘選）
+- ✅ 標籤管理（建立、編輯、刪除，支援顏色標記）
+- ✅ Prompt 收藏功能
 - ✅ 快速複製（支援變數佔位符填充）
 - ✅ 全文搜尋（FTS5 引擎）
+- ✅ 拖曳分類（拖曳 Prompt 到分類修改分類，支援分類拖曳排序）
 - ✅ 批次操作（多選、批次刪除、批次匯出）
-- ✅ 全體快照（啟動快照、手動快照、一鍵復原）
-- ✅ 匯入匯出（JSON、Markdown、CSV）
+- ✅ 全體快照（啟動快照、定時自動儲存、手動快照、一鍵復原）
+- ✅ 匯入匯出（JSON、Markdown、CSV，匯出前確認）
 - ✅ 軟體介紹頁（點擊左上角標題即可查看）
 
 ### 介面特色
@@ -52,12 +55,12 @@ PromptCaddy/
 │   ├── api/                  # API 呼叫封裝
 │   │   └── index.ts
 │   ├── components/           # React 元件
-│   │   ├── App.tsx           # 應用主元件 + 全域快速鍵
 │   │   ├── Sidebar.tsx       # 側邊欄導航
 │   │   ├── ContentArea.tsx   # 主內容區域
 │   │   ├── EditPanel.tsx     # 編輯面板
 │   │   ├── FullscreenEditor.tsx # 全螢幕編輯器
 │   │   ├── PromptCard.tsx    # Prompt 卡片
+│   │   ├── DraggablePromptCard.tsx # 可拖曳的 Prompt 卡片
 │   │   ├── SearchBar.tsx     # 搜尋欄
 │   │   ├── AboutPage.tsx     # 軟體介紹頁
 │   │   ├── TagManagement.tsx # 標籤管理
@@ -73,6 +76,16 @@ PromptCaddy/
 │   │   └── locales/
 │   │       ├── zh-CN.ts
 │   │       └── en.ts
+│   ├── utils/                # 工具函數
+│   │   ├── category.ts       # 分類工具
+│   │   ├── date.ts           # 日期工具
+│   │   ├── export.ts         # 匯出工具
+│   │   ├── exportPath.ts     # 匯出路徑工具
+│   │   ├── highlight.tsx     # 搜尋高亮
+│   │   ├── shortcuts.ts      # 快速鍵定義
+│   │   ├── tagColors.ts      # 標籤顏色
+│   │   └── theme.ts          # 主題工具
+│   ├── App.tsx               # 應用主元件 + 全域快速鍵
 │   ├── main.tsx              # 前端入口
 │   └── index.css             # 全域樣式
 ├── package.json
@@ -128,20 +141,19 @@ npm run tauri build
 | 快速鍵 | 功能 |
 |--------|------|
 | `Ctrl+N` | 新建 Prompt |
-| `Ctrl+C` | 快速複製選中卡片內容 |
-| `Ctrl+F` | 聚焦搜尋框 |
+| `Ctrl+C` | 快速複製當前聚焦卡片內容 |
 | `Ctrl+A` | 全選/退出多選模式 |
 | `Ctrl+S` | 手動儲存快照 |
 | `ESC` | 關閉面板/取消操作（按優先順序依序關閉） |
 
-> **注意**: `Ctrl+C` 僅在未選中文字且非輸入框聚焦時生效，不會影響系統預設複製行為。
+> **注意**: `Ctrl+C` 僅在滑鼠懸停於卡片上且未選中文字、非輸入框聚焦時生效，不會影響系統預設複製行為。
 
 ## 使用技巧
 
 - **變數佔位符**: 在 Prompt 正文中使用 `{{變數名}}` 格式的佔位符，複製時會彈出填寫對話框
 - **右鍵選單**: 右鍵點擊分類或卡片可以展開更多操作（建立子分類、移動分類、匯出等）
 - **分類管理**: 支援最多 3 層樹狀分類，透過側邊欄 `+` 按鈕或右鍵選單建立
-- **快照復原**: 每次啟動會自動建立快照，可在設定中手動建立或復原到歷史版本
+- **快照復原**: 每次啟動會自動建立快照並清除歷史快照，按設定間隔定時儲存（預設 10 分鐘，可選 1/5/10 分鐘）。可在設定中手動建立或復原到歷史版本
 - **軟體介紹**: 點擊左上角「Prompt Caddy」標題可查看軟體介紹和使用指南
 
 ## 授權條款

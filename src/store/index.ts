@@ -34,8 +34,8 @@ interface AppState {
   deleteCategory: (id: string) => Promise<void>;
   toggleCategoryPin: (id: string) => Promise<void>;
 
-  createTag: (name: string, color: string) => Promise<Tag>;
-  updateTag: (id: string, name: string, color: string) => Promise<void>;
+  createTag: (name: string) => Promise<Tag>;
+  updateTag: (id: string, name: string) => Promise<void>;
   deleteTag: (id: string) => Promise<void>;
 
   createPrompt: (title: string, content: string, remark?: string, categoryId?: string) => Promise<Prompt>;
@@ -55,6 +55,8 @@ interface AppState {
 
   clearAllData: () => Promise<void>;
   movePromptsToCategory: (promptIds: string[], categoryId?: string) => Promise<void>;
+  reorderPrompts: (orders: { id: string; sort_order: number }[]) => Promise<void>;
+  reorderCategories: (orders: { id: string; sort_order: number }[]) => Promise<void>;
 
   setSelectedCategory: (categoryId: string | null) => void;
   setSelectedPrompt: (prompt: Prompt | null) => void;
@@ -179,9 +181,9 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  createTag: async (name: string, color: string) => {
+  createTag: async (name: string) => {
     try {
-      const tag = await api.createTag(name, color);
+      const tag = await api.createTag(name);
       await get().loadTags();
       return tag;
     } catch (error) {
@@ -190,9 +192,9 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  updateTag: async (id: string, name: string, color: string) => {
+  updateTag: async (id: string, name: string) => {
     try {
-      await api.updateTag(id, name, color);
+      await api.updateTag(id, name);
       await get().loadTags();
     } catch (error) {
       console.error('Failed to update tag:', error);
@@ -357,6 +359,26 @@ export const useStore = create<AppState>((set, get) => ({
       await get().loadPrompts(get().selectedCategory ?? undefined, get().isFavoritesOnly);
     } catch (error) {
       console.error('Failed to move prompts:', error);
+      throw error;
+    }
+  },
+
+  reorderPrompts: async (orders: { id: string; sort_order: number }[]) => {
+    try {
+      await api.reorderPrompts(orders);
+      await get().loadPrompts(get().selectedCategory ?? undefined, get().isFavoritesOnly);
+    } catch (error) {
+      console.error('Failed to reorder prompts:', error);
+      throw error;
+    }
+  },
+
+  reorderCategories: async (orders: { id: string; sort_order: number }[]) => {
+    try {
+      await api.reorderCategories(orders);
+      await get().loadCategories();
+    } catch (error) {
+      console.error('Failed to reorder categories:', error);
       throw error;
     }
   },

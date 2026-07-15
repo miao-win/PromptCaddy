@@ -6,6 +6,23 @@ import * as api from '../api';
 import { ChevronDown, ChevronRight, Plus, Star, Folder, Tag, Settings, Trash2, Edit2, FileDown, FolderPlus, Check, X, Pin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { exportAndSave } from '../utils/export';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 type Page = 'home' | 'tags' | 'settings' | 'about';
 
@@ -62,7 +79,16 @@ function CategoryItem({
   onConfirmRename,
   onCancelRename,
 }: CategoryItemProps) {
-  const { categories } = useStore();
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSortableRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: category.id });
+
+  const { categories, reorderCategories } = useStore();
   const { t } = useTranslation();
   const children = categories.filter((c) => c.parent_id === category.id);
   const isExpanded = expandedCategories.has(category.id);
@@ -71,10 +97,41 @@ function CategoryItem({
   const isRenaming = renamingCategory === category.id;
   const canHaveChildren = level < 2; // max 3 levels (0, 1, 2)
 
+  const sortableStyle = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  // Handle drag end for children at this level
+  const handleChildDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const siblings = categories.filter(c => c.parent_id === category.id);
+    const oldIndex = siblings.findIndex(c => c.id === active.id);
+    const newIndex = siblings.findIndex(c => c.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(siblings, oldIndex, newIndex);
+    const orders = reordered.map((c, i) => ({ id: c.id, sort_order: i }));
+    try {
+      await reorderCategories(orders);
+    } catch (error) {
+      toast.error(t('sidebar.msg.reorderFailed'));
+    }
+  };
+
+  const childSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   return (
-    <div>
+    <div ref={setSortableRef} style={sortableStyle}>
       <div
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all group ${
+        data-category-id={category.id}
+        className={`flex items-center justify-between px-3 py-2 rounded-lg cursor-pointer transition-all group ${
           isSelected
             ? 'bg-white/20 text-white'
             : 'hover:bg-white/10 text-white/80'
@@ -83,44 +140,69 @@ function CategoryItem({
         onClick={() => onSelect(category.id)}
         onContextMenu={(e) => onContextMenu(e, category)}
       >
-        {/* Pin indicator - leftmost position */}
-        {category.is_pinned === 1 ? (
-          <Pin size={14} className="flex-shrink-0 text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)]" fill="currentColor" />
-        ) : (
-          <span className="w-[14px]" />
-        )}
+        {/* Left side: pin + folder icon (drag handle) + name + expand */}
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {/* Pin indicator */}
+          {category.is_pinned === 1 ? (
+            <Pin size={14} className="flex-shrink-0 text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)]" fill="currentColor" />
+          ) : (
+            <span className="w-[14px]" />
+          )}
 
-        <Folder size={16} className="flex-shrink-0" />
-        <span className="flex-1 truncate text-sm">{category.name}</span>
+          {/* Folder icon - drag handle for category reordering */}
+          <span
+            {...attributes}
+            {...listeners}
+            className="flex-shrink-0 cursor-grab active:cursor-grabbing"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Folder size={16} />
+          </span>
 
-        {children.length > 0 || isCreatingSub ? (
+          {/* Category name */}
+          <span className="flex-1 truncate text-sm">{category.name}</span>
+
+          {/* Expand button */}
+          {children.length > 0 || isCreatingSub ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand(category.id);
+              }}
+              className="p-0.5 hover:bg-white/20 rounded flex-shrink-0"
+            >
+              {isExpanded || isCreatingSub ? (
+                <ChevronDown size={14} />
+              ) : (
+                <ChevronRight size={14} />
+              )}
+            </button>
+          ) : (
+            <span className="w-5 flex-shrink-0" />
+          )}
+        </div>
+
+        {/* Right side: action icons (right to left) */}
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity ml-2 flex-shrink-0">
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onToggleExpand(category.id);
+              onDelete(category.id);
             }}
-            className="p-0.5 hover:bg-white/20 rounded"
+            className="p-1 hover:bg-white/20 rounded"
+            title={t('sidebar.deleteCategory')}
           >
-            {isExpanded || isCreatingSub ? (
-              <ChevronDown size={14} />
-            ) : (
-              <ChevronRight size={14} />
-            )}
+            <Trash2 size={12} />
           </button>
-        ) : (
-          <span className="w-5" />
-        )}
-
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onTogglePin(category.id);
+              onStartRename(category);
             }}
-            className={`p-1 hover:bg-white/20 rounded ${category.is_pinned === 1 ? 'text-amber-400' : ''}`}
-            title={category.is_pinned === 1 ? t('sidebar.unpinCategory') : t('sidebar.pinCategory')}
+            className="p-1 hover:bg-white/20 rounded"
+            title={t('sidebar.rename')}
           >
-            <Pin size={12} />
+            <Edit2 size={12} />
           </button>
           {canHaveChildren && (
             <button
@@ -137,22 +219,12 @@ function CategoryItem({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onStartRename(category);
+              onTogglePin(category.id);
             }}
-            className="p-1 hover:bg-white/20 rounded"
-            title={t('sidebar.rename')}
+            className={`p-1 hover:bg-white/20 rounded ${category.is_pinned === 1 ? 'text-amber-400' : ''}`}
+            title={category.is_pinned === 1 ? t('sidebar.unpinCategory') : t('sidebar.pinCategory')}
           >
-            <Edit2 size={12} />
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(category.id);
-            }}
-            className="p-1 hover:bg-white/20 rounded"
-            title={t('sidebar.deleteCategory')}
-          >
-            <Trash2 size={12} />
+            <Pin size={12} />
           </button>
         </div>
       </div>
@@ -216,34 +288,42 @@ function CategoryItem({
       )}
 
       {(isExpanded || isCreatingSub || isRenaming) && children.length > 0 && (
-        <div>
-          {children.map((child) => (
-            <CategoryItem
-              key={child.id}
-              category={child}
-              level={level + 1}
-              expandedCategories={expandedCategories}
-              onToggleExpand={onToggleExpand}
-              onSelect={onSelect}
-              onStartRename={onStartRename}
-              onDelete={onDelete}
-              onTogglePin={onTogglePin}
-              onContextMenu={onContextMenu}
-              onCreateSubcategory={onCreateSubcategory}
-              selectedCategory={selectedCategory}
-              creatingSubcategoryFor={creatingSubcategoryFor}
-              subcategoryName={subcategoryName}
-              onSubcategoryNameChange={onSubcategoryNameChange}
-              onConfirmSubcategory={onConfirmSubcategory}
-              onCancelSubcategory={onCancelSubcategory}
-              renamingCategory={renamingCategory}
-              renameCategoryName={renameCategoryName}
-              onRenameNameChange={onRenameNameChange}
-              onConfirmRename={onConfirmRename}
-              onCancelRename={onCancelRename}
-            />
-          ))}
-        </div>
+        <DndContext
+          sensors={childSensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleChildDragEnd}
+        >
+          <SortableContext items={children.map(c => c.id)} strategy={verticalListSortingStrategy}>
+            <div>
+              {children.map((child) => (
+                <CategoryItem
+                  key={child.id}
+                  category={child}
+                  level={level + 1}
+                  expandedCategories={expandedCategories}
+                  onToggleExpand={onToggleExpand}
+                  onSelect={onSelect}
+                  onStartRename={onStartRename}
+                  onDelete={onDelete}
+                  onTogglePin={onTogglePin}
+                  onContextMenu={onContextMenu}
+                  onCreateSubcategory={onCreateSubcategory}
+                  selectedCategory={selectedCategory}
+                  creatingSubcategoryFor={creatingSubcategoryFor}
+                  subcategoryName={subcategoryName}
+                  onSubcategoryNameChange={onSubcategoryNameChange}
+                  onConfirmSubcategory={onConfirmSubcategory}
+                  onCancelSubcategory={onCancelSubcategory}
+                  renamingCategory={renamingCategory}
+                  renameCategoryName={renameCategoryName}
+                  onRenameNameChange={onRenameNameChange}
+                  onConfirmRename={onConfirmRename}
+                  onCancelRename={onCancelRename}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
       )}
     </div>
   );
@@ -264,6 +344,30 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
 
   const { t } = useTranslation();
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const reorderCategories = useStore(s => s.reorderCategories);
+
+  const handleRootDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = rootCategories.findIndex(c => c.id === active.id);
+    const newIndex = rootCategories.findIndex(c => c.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(rootCategories, oldIndex, newIndex);
+    const orders = reordered.map((c, i) => ({ id: c.id, sort_order: i }));
+    try {
+      await reorderCategories(orders);
+    } catch (error) {
+      toast.error(t('sidebar.msg.reorderFailed'));
+    }
+  };
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
@@ -346,6 +450,7 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
         toast.error(t('sidebar.msg.noPromptInCategory'));
         return;
       }
+      if (!confirm(t('sidebar.confirm.exportCategory', { name: category.name }))) return;
       const ids = prompts.map((p) => p.id);
       const filename = `${category.name}_export_${new Date().toISOString().slice(0, 10)}`;
       const fullPath = await exportAndSave(ids, filename);
@@ -564,32 +669,40 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
           </div>
         )}
 
-        {rootCategories.map((category) => (
-          <CategoryItem
-            key={category.id}
-            category={category}
-            level={0}
-            expandedCategories={expandedCategories}
-            onToggleExpand={toggleExpand}
-            onSelect={handleSelectCategory}
-            onStartRename={handleStartRename}
-            onDelete={handleDeleteCategory}
-            onTogglePin={handleTogglePin}
-            onContextMenu={handleCategoryContextMenu}
-            onCreateSubcategory={handleCreateSubcategory}
-            selectedCategory={selectedCategory}
-            creatingSubcategoryFor={creatingSubcategoryFor}
-            subcategoryName={subcategoryName}
-            onSubcategoryNameChange={setSubcategoryName}
-            onConfirmSubcategory={handleConfirmSubcategory}
-            onCancelSubcategory={handleCancelSubcategory}
-            renamingCategory={renamingCategory}
-            renameCategoryName={renameCategoryName}
-            onRenameNameChange={setRenameCategoryName}
-            onConfirmRename={handleConfirmRename}
-            onCancelRename={handleCancelRename}
-          />
-        ))}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragEnd={handleRootDragEnd}
+        >
+          <SortableContext items={rootCategories.map(c => c.id)} strategy={verticalListSortingStrategy}>
+            {rootCategories.map((category) => (
+              <CategoryItem
+                key={category.id}
+                category={category}
+                level={0}
+                expandedCategories={expandedCategories}
+                onToggleExpand={toggleExpand}
+                onSelect={handleSelectCategory}
+                onStartRename={handleStartRename}
+                onDelete={handleDeleteCategory}
+                onTogglePin={handleTogglePin}
+                onContextMenu={handleCategoryContextMenu}
+                onCreateSubcategory={handleCreateSubcategory}
+                selectedCategory={selectedCategory}
+                creatingSubcategoryFor={creatingSubcategoryFor}
+                subcategoryName={subcategoryName}
+                onSubcategoryNameChange={setSubcategoryName}
+                onConfirmSubcategory={handleConfirmSubcategory}
+                onCancelSubcategory={handleCancelSubcategory}
+                renamingCategory={renamingCategory}
+                renameCategoryName={renameCategoryName}
+                onRenameNameChange={setRenameCategoryName}
+                onConfirmRename={handleConfirmRename}
+                onCancelRename={handleCancelRename}
+              />
+            ))}
+          </SortableContext>
+        </DndContext>
       </div>
 
       {/* Bottom actions */}

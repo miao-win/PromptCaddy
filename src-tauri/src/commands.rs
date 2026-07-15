@@ -1,6 +1,13 @@
 use tauri::State;
+use serde::Deserialize;
 use crate::AppState;
 use crate::db::{Category, Tag, Prompt, Snapshot, SearchResult};
+
+#[derive(Deserialize)]
+pub struct SortOrder {
+    pub id: String,
+    pub sort_order: i32,
+}
 
 // Categories
 #[tauri::command]
@@ -41,15 +48,15 @@ pub fn get_tags(state: State<AppState>) -> Result<Vec<Tag>, String> {
 }
 
 #[tauri::command]
-pub fn create_tag(state: State<AppState>, name: String, color: String) -> Result<Tag, String> {
+pub fn create_tag(state: State<AppState>, name: String) -> Result<Tag, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.create_tag(&name, &color).map_err(|e| e.to_string())
+    db.create_tag(&name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub fn update_tag(state: State<AppState>, id: String, name: String, color: String) -> Result<(), String> {
+pub fn update_tag(state: State<AppState>, id: String, name: String) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.update_tag(&id, &name, &color).map_err(|e| e.to_string())
+    db.update_tag(&id, &name).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -93,6 +100,20 @@ pub fn delete_prompt(state: State<AppState>, id: String) -> Result<(), String> {
 pub fn toggle_favorite(state: State<AppState>, id: String) -> Result<i32, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.toggle_favorite(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn reorder_prompts(state: State<AppState>, orders: Vec<SortOrder>) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let tuples: Vec<(String, i32)> = orders.into_iter().map(|o| (o.id, o.sort_order)).collect();
+    db.reorder_prompts(&tuples).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn reorder_categories(state: State<AppState>, orders: Vec<SortOrder>) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let tuples: Vec<(String, i32)> = orders.into_iter().map(|o| (o.id, o.sort_order)).collect();
+    db.reorder_categories(&tuples).map_err(|e| e.to_string())
 }
 
 // Prompt-Tag relations
@@ -269,4 +290,26 @@ pub async fn pick_directory(app: tauri::AppHandle) -> Result<Option<String>, Str
         let _ = tx.send(folder.map(|f| f.to_string()));
     });
     rx.recv().map_err(|e| format!("对话框错误: {}", e))
+}
+
+#[tauri::command]
+pub fn get_default_export_path() -> String {
+    // Try Downloads directory first, then Documents
+    if let Some(home) = dirs_next::home_dir() {
+        let downloads = home.join("Downloads");
+        if downloads.exists() {
+            return downloads.to_string_lossy().to_string();
+        }
+        let documents = home.join("Documents");
+        if documents.exists() {
+            return documents.to_string_lossy().to_string();
+        }
+        return home.to_string_lossy().to_string();
+    }
+    // Fallback
+    if cfg!(target_os = "windows") {
+        "C:\\Users".to_string()
+    } else {
+        "/tmp".to_string()
+    }
 }

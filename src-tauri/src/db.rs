@@ -16,7 +16,6 @@ pub struct Category {
 pub struct Tag {
     pub id: String,
     pub name: String,
-    pub color: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -27,6 +26,7 @@ pub struct Prompt {
     pub remark: Option<String>,
     pub category_id: Option<String>,
     pub is_favorite: i32,
+    pub sort_order: i32,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -79,7 +79,7 @@ impl Database {
             CREATE TABLE IF NOT EXISTS tags (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL UNIQUE,
-                color TEXT NOT NULL
+                color TEXT NOT NULL DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS prompts (
@@ -89,6 +89,7 @@ impl Database {
                 remark TEXT,
                 category_id TEXT,
                 is_favorite INTEGER NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
                 FOREIGN KEY (category_id) REFERENCES categories(id)
@@ -135,6 +136,12 @@ impl Database {
         // Migration: add is_pinned column to categories if not exists
         let _ = self.conn.execute(
             "ALTER TABLE categories ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+
+        // Migration: add sort_order column to prompts if not exists
+        let _ = self.conn.execute(
+            "ALTER TABLE prompts ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
             [],
         );
 
@@ -191,6 +198,32 @@ impl Database {
     }
 
     pub fn update_category(&self, id: &str, name: &str, parent_id: Option<&str>, sort_order: i32) -> Result<()> {
+        // Validate depth: prevent moving a category under a parent that would exceed 3 levels
+        if let Some(pid) = parent_id {
+            // Cannot set parent to self
+            if pid == id {
+                return Err(rusqlite::Error::InvalidParameterName("A category cannot be its own parent".to_string()));
+            }
+            // Cannot create a cycle: check if `id` is an ancestor of `pid`
+            let mut check_id = Some(pid.to_string());
+            while let Some(cid) = check_id {
+                if cid == id {
+                    return Err(rusqlite::Error::InvalidParameterName("Cannot move category under its own descendant (cycle detected)".to_string()));
+                }
+                let parent: Option<String> = self.conn.query_row(
+                    "SELECT parent_id FROM categories WHERE id = ?",
+                    params![cid],
+                    |row| row.get(0),
+                )?;
+                check_id = parent;
+            }
+            // Check depth limit
+            let parent_depth = self.get_category_depth(pid)?;
+            if parent_depth >= 3 {
+                return Err(rusqlite::Error::InvalidParameterName("Maximum category depth reached (max 3 levels)".to_string()));
+            }
+        }
+
         self.conn.execute(
             "UPDATE categories SET name = ?, parent_id = ?, sort_order = ? WHERE id = ?",
             params![name, parent_id, sort_order, id],
@@ -289,38 +322,36 @@ impl Database {
     // Tags
     pub fn get_tags(&self) -> Result<Vec<Tag>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, color FROM tags ORDER BY name"
+            "SELECT id, name FROM tags ORDER BY name"
         )?;
 
         let tags = stmt.query_map([], |row| {
             Ok(Tag {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                color: row.get(2)?,
             })
         })?.collect::<Result<Vec<_>>>()?;
 
         Ok(tags)
     }
 
-    pub fn create_tag(&self, name: &str, color: &str) -> Result<Tag> {
+    pub fn create_tag(&self, name: &str) -> Result<Tag> {
         let id = Uuid::new_v4().to_string();
         self.conn.execute(
-            "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
-            params![id, name, color],
+            "INSERT INTO tags (id, name, color) VALUES (?, ?, '')",
+            params![id, name],
         )?;
 
         Ok(Tag {
             id,
             name: name.to_string(),
-            color: color.to_string(),
         })
     }
 
-    pub fn update_tag(&self, id: &str, name: &str, color: &str) -> Result<()> {
+    pub fn update_tag(&self, id: &str, name: &str) -> Result<()> {
         self.conn.execute(
-            "UPDATE tags SET name = ?, color = ? WHERE id = ?",
-            params![name, color, id],
+            "UPDATE tags SET name = ? WHERE id = ?",
+            params![name, id],
         )?;
         Ok(())
     }
@@ -343,7 +374,7 @@ impl Database {
                 let in_clause = placeholders.join(", ");
                 let fav_clause = if fav { " AND is_favorite = 1" } else { "" };
                 let sql = format!(
-                    "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at FROM prompts WHERE category_id IN ({}){} ORDER BY title ASC",
+                    "SELECT id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at FROM prompts WHERE category_id IN ({}){} ORDER BY sort_order, title ASC",
                     in_clause, fav_clause
                 );
                 let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids.into_iter()
@@ -352,11 +383,11 @@ impl Database {
                 (sql, params)
             },
             (None, true) => (
-                "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at FROM prompts WHERE is_favorite = 1 ORDER BY title ASC".to_string(),
+                "SELECT id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at FROM prompts WHERE is_favorite = 1 ORDER BY sort_order, title ASC".to_string(),
                 vec![],
             ),
             (None, false) => (
-                "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at FROM prompts ORDER BY title ASC".to_string(),
+                "SELECT id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at FROM prompts ORDER BY sort_order, title ASC".to_string(),
                 vec![],
             ),
         };
@@ -371,8 +402,9 @@ impl Database {
                 remark: row.get(3)?,
                 category_id: row.get(4)?,
                 is_favorite: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                sort_order: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         })?.collect::<Result<Vec<_>>>()?;
 
@@ -381,7 +413,7 @@ impl Database {
 
     pub fn get_prompt_by_id(&self, id: &str) -> Result<Prompt> {
         self.conn.query_row(
-            "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at FROM prompts WHERE id = ?",
+            "SELECT id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at FROM prompts WHERE id = ?",
             params![id],
             |row| {
                 Ok(Prompt {
@@ -391,8 +423,9 @@ impl Database {
                     remark: row.get(3)?,
                     category_id: row.get(4)?,
                     is_favorite: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                    sort_order: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
                 })
             },
         )
@@ -414,6 +447,7 @@ impl Database {
             remark: remark.map(|s| s.to_string()),
             category_id: category_id.map(|s| s.to_string()),
             is_favorite: 0,
+            sort_order: 0,
             created_at: now.clone(),
             updated_at: now,
         })
@@ -452,6 +486,30 @@ impl Database {
         Ok(new_value)
     }
 
+    pub fn reorder_prompts(&self, prompt_orders: &[(String, i32)]) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for (id, sort_order) in prompt_orders {
+            tx.execute(
+                "UPDATE prompts SET sort_order = ? WHERE id = ?",
+                params![sort_order, id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn reorder_categories(&self, category_orders: &[(String, i32)]) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        for (id, sort_order) in category_orders {
+            tx.execute(
+                "UPDATE categories SET sort_order = ? WHERE id = ?",
+                params![sort_order, id],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     // Prompt-Tag relations
     pub fn add_tag_to_prompt(&self, prompt_id: &str, tag_id: &str) -> Result<()> {
         self.conn.execute(
@@ -471,14 +529,13 @@ impl Database {
 
     pub fn get_prompt_tags(&self, prompt_id: &str) -> Result<Vec<Tag>> {
         let mut stmt = self.conn.prepare(
-            "SELECT t.id, t.name, t.color FROM tags t INNER JOIN prompt_tags pt ON t.id = pt.tag_id WHERE pt.prompt_id = ? ORDER BY t.name"
+            "SELECT t.id, t.name FROM tags t INNER JOIN prompt_tags pt ON t.id = pt.tag_id WHERE pt.prompt_id = ? ORDER BY t.name"
         )?;
 
         let tags = stmt.query_map(params![prompt_id], |row| {
             Ok(Tag {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                color: row.get(2)?,
             })
         })?.collect::<Result<Vec<_>>>()?;
 
@@ -492,7 +549,7 @@ impl Database {
         let fts_query = format!("\"{}\"", sanitized);
 
         let mut stmt = self.conn.prepare(
-            "SELECT p.id, p.title, p.content, p.remark, p.category_id, p.is_favorite, p.created_at, p.updated_at
+            "SELECT p.id, p.title, p.content, p.remark, p.category_id, p.is_favorite, p.sort_order, p.created_at, p.updated_at
              FROM prompts p
              INNER JOIN prompts_fts fts ON p.rowid = fts.rowid
              WHERE prompts_fts MATCH ?
@@ -507,8 +564,9 @@ impl Database {
                 remark: row.get(3)?,
                 category_id: row.get(4)?,
                 is_favorite: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                sort_order: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
             })
         }).and_then(|rows| rows.collect::<Result<Vec<_>>>());
 
@@ -523,7 +581,7 @@ impl Database {
                     .replace('_', "\\_");
                 let like_pattern = format!("%{}%", escaped_query);
                 let mut fallback_stmt = self.conn.prepare(
-                    "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at
+                    "SELECT id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at
                      FROM prompts
                      WHERE title LIKE ?1 ESCAPE '\\' OR content LIKE ?1 ESCAPE '\\' OR remark LIKE ?1 ESCAPE '\\'
                      ORDER BY title ASC"
@@ -536,8 +594,9 @@ impl Database {
                         remark: row.get(3)?,
                         category_id: row.get(4)?,
                         is_favorite: row.get(5)?,
-                        created_at: row.get(6)?,
-                        updated_at: row.get(7)?,
+                        sort_order: row.get(6)?,
+                        created_at: row.get(7)?,
+                        updated_at: row.get(8)?,
                     })
                 })?.collect::<Result<Vec<_>>>()?;
                 rows
@@ -672,7 +731,7 @@ impl Database {
                         params![
                             tag["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag id".into()))?,
                             tag["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag name".into()))?,
-                            tag["color"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag color".into()))?,
+                            tag["color"].as_str().unwrap_or(""),
                         ],
                     )?;
                 }
@@ -898,7 +957,7 @@ impl Database {
                     params![
                         tag["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag id".into()))?,
                         tag["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag name".into()))?,
-                        tag["color"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag color".into()))?,
+                        tag["color"].as_str().unwrap_or(""),
                     ],
                 )?;
             }
@@ -981,7 +1040,7 @@ impl Database {
                         params![
                             tag_id,
                             tag["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag name".into()))?,
-                            tag["color"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag color".into()))?,
+                            tag["color"].as_str().unwrap_or(""),
                         ],
                     )?;
                 }
@@ -1070,7 +1129,7 @@ impl Database {
                     params![
                         new_id,
                         tag["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag name".into()))?,
-                        tag["color"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag color".into()))?,
+                        tag["color"].as_str().unwrap_or(""),
                     ],
                 )?;
             }

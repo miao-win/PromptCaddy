@@ -5,8 +5,6 @@ import { Tag } from '../types';
 import { Plus, Edit2, Trash2, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const DEFAULT_COLOR = '#888888';
-
 export default function TagManagement() {
   const { tags, createTag, updateTag, deleteTag } = useStore();
   const { t } = useTranslation();
@@ -23,7 +21,7 @@ export default function TagManagement() {
     }
 
     try {
-      await createTag(newTagName.trim(), DEFAULT_COLOR);
+      await createTag(newTagName.trim());
       setNewTagName('');
       setIsCreating(false);
       toast.success(t('tags.msg.created'));
@@ -39,7 +37,7 @@ export default function TagManagement() {
     }
 
     try {
-      await updateTag(editingTag.id, editTagName.trim(), DEFAULT_COLOR);
+      await updateTag(editingTag.id, editTagName.trim());
       setEditingTag(null);
       setEditTagName('');
       toast.success(t('tags.msg.updated'));

@@ -1,6 +1,7 @@
 const en: Record<string, string> = {
   // App
   'app.startupSnapshot': 'Startup Snapshot',
+  'app.autoSaveSnapshot': 'Auto Save',
 
   // Sidebar
   'sidebar.appTitle': 'Prompt Manager',
@@ -34,8 +35,10 @@ const en: Record<string, string> = {
   'sidebar.msg.unpinSuccess': 'Category unpinned',
   'sidebar.msg.pinFailed': 'Failed to pin category',
   'sidebar.msg.noPromptInCategory': 'No prompts in this category',
+  'sidebar.confirm.exportCategory': 'Export all prompts in category "{name}"?',
   'sidebar.msg.exportedTo': 'Exported to: {path}',
   'sidebar.msg.exportFailed': 'Export failed: {error}',
+  'sidebar.msg.reorderFailed': 'Failed to reorder',
   'sidebar.confirm.deleteCategory': 'Delete category "{name}"? Prompts in this category will become uncategorized.',
   'sidebar.confirm.deleteCategorySimple': 'Delete this category? Prompts in this category will become uncategorized.',
 
@@ -63,9 +66,11 @@ const en: Record<string, string> = {
   'content.msg.batchDeleteFailed': 'Batch delete failed',
   'content.msg.batchMoveSuccess': 'Batch move successful',
   'content.msg.moveFailed': 'Move failed',
+  'content.msg.reorderFailed': 'Failed to reorder',
   'content.msg.exportedTo': 'Exported to: {path}',
   'content.msg.exportFailed': 'Export failed: {error}',
   'content.confirm.batchDelete': 'Delete {count} selected prompts?',
+  'content.confirm.export': 'Export {count} selected prompts?',
 
   // EditPanel
   'edit.newPrompt': 'New Prompt',
@@ -119,6 +124,7 @@ const en: Record<string, string> = {
   'card.msg.exportedTo': 'Exported to: {path}',
   'card.msg.exportFailed': 'Export failed: {error}',
   'card.confirm.delete': 'Delete this prompt?',
+  'card.confirm.export': 'Export this prompt?',
 
   // SearchBar
   'search.placeholder': 'Search prompts... (Ctrl+F)',
@@ -155,7 +161,8 @@ const en: Record<string, string> = {
   // Settings - Data
   'settings.exportPath': 'Export Path',
   'settings.browse': 'Browse',
-  'settings.exportPathHint': 'Exported files will be saved to this directory. Falls back to D:\\downloads if the path does not exist.',
+  'settings.exportPathHint': 'Exported files will be saved to this directory. Leave empty to use the system default Downloads folder.',
+  'settings.exportPathPlaceholder': 'Leave empty for system default',
   'settings.dataExportImport': 'Export & Import',
   'settings.exportAll': 'Export All',
   'settings.importAll': 'Import All',
@@ -188,6 +195,7 @@ const en: Record<string, string> = {
   'settings.densityStandard': 'Standard',
   'settings.densityRelaxed': 'Relaxed',
   'settings.glassIntensity': 'Glass Effect Intensity',
+  'settings.autoSnapshotInterval': 'Auto-save Interval',
   'settings.glassWeak': 'Weak',
   'settings.glassStrong': 'Strong',
 
@@ -200,6 +208,7 @@ const en: Record<string, string> = {
   'settings.msg.snapshotDeleteFailed': 'Failed to delete snapshot',
   'settings.msg.exportedTo': 'Exported to: {path}',
   'settings.msg.exportFailed': 'Export failed: {error}',
+  'settings.msg.exportEmptyPrompt': 'No prompts available to export',
   'settings.msg.importSuccess': 'Import successful',
   'settings.msg.importFailed': 'Import failed: invalid file format',
   'settings.msg.importFailedGeneric': 'Import failed',
@@ -211,6 +220,7 @@ const en: Record<string, string> = {
   'settings.confirm.clearData': 'Clear all data? This cannot be undone. All prompts, categories, and tags will be permanently deleted.',
   'settings.confirm.clearDataAgain': 'Confirm again: this action is irreversible. Continue?',
   'settings.confirm.importOverwrite': 'Overwrite existing data?\n\nOK = Overwrite\nCancel = Skip duplicates',
+  'settings.confirm.exportAll': 'Export all data?',
   'settings.snapshotDefault': 'Startup Snapshot',
 
   // TagManagement
@@ -225,7 +235,7 @@ const en: Record<string, string> = {
 
   // VariableFillDialog
   'variable.title': 'Fill Variables',
-  'variable.description': 'The following variables were detected. Please fill in their values:',
+  'variable.description': 'The following variables were detected. Fill in values as needed (unfilled ones keep their placeholder):',
   'variable.placeholder': 'Enter value for {name}',
   'variable.preview': 'Preview:',
   'variable.shortcutHint': 'Ctrl+Enter to quick copy',
@@ -257,19 +267,19 @@ const en: Record<string, string> = {
   'about.feature.category': 'Tree Categories',
   'about.feature.categoryDesc': 'Up to 3 levels of categories, right-click to manage',
   'about.feature.tag': 'Tag System',
-  'about.feature.tagDesc': 'Custom colored tags for flexible organization',
+  'about.feature.tagDesc': 'Custom tags for flexible organization',
   'about.feature.copy': 'Quick Copy',
   'about.feature.copyDesc': 'One-click copy with variable placeholder filling',
   'about.feature.search': 'Full-Text Search',
   'about.feature.searchDesc': 'Instant search across titles and content',
   'about.feature.snapshot': 'Snapshot & Restore',
-  'about.feature.snapshotDesc': 'Auto-save startup snapshots, restore anytime',
+  'about.feature.snapshotDesc': 'Startup snapshots, timed auto-save, manual snapshots, restore anytime',
   'about.shortcuts.title': 'Keyboard Shortcuts',
   'about.tips.title': 'Tips',
   'about.tips.variable': 'Use {{variable}} format placeholders in content — a fill dialog will appear when copying',
   'about.tips.rightClick': 'Right-click on categories or cards to access more actions',
-  'about.tips.dragDrop': 'Configure a default export path in Settings for convenient batch exports',
-  'about.tips.snapshot': 'A snapshot is created on every launch. You can manually create snapshots or restore to history in Settings',
+  'about.tips.dragDrop': 'Drag a prompt card onto a sidebar category to quickly change its category',
+  'about.tips.snapshot': 'A snapshot is created on every launch, with timed auto-saves at your chosen interval (1/5/10 min). You can also manually create snapshots or restore to history in Settings',
 };
 
 export default en;

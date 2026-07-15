@@ -120,7 +120,7 @@ export default function AboutPage() {
         </div>
 
         {/* Version */}
-        <p className="text-center text-white/30 text-xs mt-8 mb-4">v0.2.0</p>
+        <p className="text-center text-white/30 text-xs mt-8 mb-4">v0.3.0</p>
       </div>
     </div>
   );

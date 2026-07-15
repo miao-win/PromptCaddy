@@ -153,6 +153,7 @@ body {
 
 .dark body {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: #ffffff;
 }
 
 .glass-effect {
@@ -183,7 +184,7 @@ body {
   -webkit-backdrop-filter: blur(4px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 12px;
-  color: inherit;
+  color: #ffffff;
   transition: all 0.3s ease;
 }
 
@@ -199,7 +200,7 @@ body {
   -webkit-backdrop-filter: blur(4px);
   border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 12px;
-  color: inherit;
+  color: #ffffff;
   cursor: pointer;
   transition: all 0.3s ease;
 }
@@ -427,4 +428,82 @@ body {
   50% {
     box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.22), 0 0 20px rgba(59, 130, 246, 0.15);
   }
+}
+
+/* ===== Search keyword highlight ===== */
+.search-highlight {
+  background: rgba(250, 204, 21, 0.4);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+:root:not(.dark) .search-highlight {
+  background: rgba(250, 204, 21, 0.35);
+}
+
+/* ===== Drag and drop ===== */
+.drag-handle {
+  cursor: grab;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+}
+
+.drag-handle:hover {
+  opacity: 0.8;
+}
+
+.drag-overlay {
+  opacity: 0.9;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  transform: scale(1.02);
+}
+
+/* ===== Tag color theme adaptation ===== */
+/* Dark mode: soft tinted backgrounds, bright text */
+.tag-blue    { background-color: hsla(217, 91%, 60%, 0.20); color: hsl(217, 91%, 70%); }
+.tag-indigo  { background-color: hsla(239, 84%, 67%, 0.20); color: hsl(239, 84%, 75%); }
+.tag-purple  { background-color: hsla(262, 84%, 60%, 0.20); color: hsl(262, 80%, 72%); }
+.tag-pink    { background-color: hsla(330, 81%, 60%, 0.20); color: hsl(330, 81%, 70%); }
+.tag-red     { background-color: hsla(0, 84%, 60%, 0.20);   color: hsl(0, 84%, 70%); }
+.tag-orange  { background-color: hsla(25, 95%, 53%, 0.20);  color: hsl(25, 95%, 65%); }
+.tag-amber   { background-color: hsla(38, 92%, 50%, 0.20);  color: hsl(38, 92%, 60%); }
+.tag-yellow  { background-color: hsla(48, 96%, 53%, 0.20);  color: hsl(48, 80%, 55%); }
+.tag-lime    { background-color: hsla(84, 81%, 44%, 0.20);  color: hsl(84, 81%, 55%); }
+.tag-green   { background-color: hsla(142, 71%, 45%, 0.20); color: hsl(142, 71%, 55%); }
+.tag-teal    { background-color: hsla(168, 76%, 42%, 0.20); color: hsl(168, 76%, 55%); }
+.tag-cyan    { background-color: hsla(189, 94%, 43%, 0.20); color: hsl(189, 94%, 55%); }
+
+/* Light mode: deeper backgrounds for contrast, white/dark text */
+:root:not(.dark) .tag-blue    { background-color: hsla(217, 91%, 60%, 0.18); color: hsl(217, 91%, 42%); }
+:root:not(.dark) .tag-indigo  { background-color: hsla(239, 84%, 67%, 0.18); color: hsl(239, 84%, 48%); }
+:root:not(.dark) .tag-purple  { background-color: hsla(262, 84%, 60%, 0.18); color: hsl(262, 84%, 45%); }
+:root:not(.dark) .tag-pink    { background-color: hsla(330, 81%, 60%, 0.18); color: hsl(330, 81%, 42%); }
+:root:not(.dark) .tag-red     { background-color: hsla(0, 84%, 60%, 0.18);   color: hsl(0, 72%, 45%); }
+:root:not(.dark) .tag-orange  { background-color: hsla(25, 95%, 53%, 0.18);  color: hsl(25, 90%, 38%); }
+:root:not(.dark) .tag-amber   { background-color: hsla(38, 92%, 50%, 0.18);  color: hsl(38, 80%, 35%); }
+:root:not(.dark) .tag-yellow  { background-color: hsla(48, 96%, 53%, 0.18);  color: hsl(48, 70%, 32%); }
+:root:not(.dark) .tag-lime    { background-color: hsla(84, 81%, 44%, 0.18);  color: hsl(84, 60%, 30%); }
+:root:not(.dark) .tag-green   { background-color: hsla(142, 71%, 45%, 0.18); color: hsl(142, 60%, 30%); }
+:root:not(.dark) .tag-teal    { background-color: hsla(168, 76%, 42%, 0.18); color: hsl(168, 60%, 30%); }
+:root:not(.dark) .tag-cyan    { background-color: hsla(189, 94%, 43%, 0.18); color: hsl(189, 70%, 30%); }
+
+/* ===== Dialog backdrop - tinted to match background gradient ===== */
+.dialog-backdrop {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+:root:not(.dark) .dialog-backdrop {
+  background: rgba(120, 170, 220, 0.35);
+}
+
+/* ===== Drop target highlight (prompt → category) ===== */
+.drop-target-active {
+  background-color: rgba(34, 197, 94, 0.25) !important;
+  box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.5);
+}
+
+:root:not(.dark) .drop-target-active {
+  background-color: rgba(34, 197, 94, 0.2) !important;
+  box-shadow: inset 0 0 0 2px rgba(34, 197, 94, 0.4);
 }

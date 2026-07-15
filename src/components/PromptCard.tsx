@@ -8,15 +8,18 @@ import toast from 'react-hot-toast';
 import VariableFillDialog from './VariableFillDialog';
 import { buildCategoryPath, getFlatCategoryList } from '../utils/category';
 import { exportAndSave } from '../utils/export';
+import { highlightText } from '../utils/highlight';
+import { getTagColorClass } from '../utils/tagColors';
 
 interface PromptCardProps {
   prompt: Prompt;
   isSelected?: boolean;
   isMultiSelectMode?: boolean;
   onFocus?: (promptId: string | null) => void;
+  searchQuery?: string;
 }
 
-export default function PromptCard({ prompt, isSelected = false, isMultiSelectMode = false, onFocus }: PromptCardProps) {
+export default function PromptCard({ prompt, isSelected = false, isMultiSelectMode = false, onFocus, searchQuery }: PromptCardProps) {
   const {
     setSelectedPrompt,
     toggleFavorite,
@@ -123,6 +126,7 @@ export default function PromptCard({ prompt, isSelected = false, isMultiSelectMo
   };
 
   const handleExportJson = async () => {
+    if (!confirm(t('card.confirm.export'))) return;
     try {
       const fullPath = await exportAndSave([prompt.id], prompt.title);
       toast.success(t('card.msg.exportedTo', { path: fullPath }));
@@ -166,7 +170,7 @@ export default function PromptCard({ prompt, isSelected = false, isMultiSelectMo
                 {isSelected && <span className="text-purple-600 text-xs font-bold">✓</span>}
               </div>
             )}
-            <h3 className="text-white font-medium text-sm truncate">{prompt.title}</h3>
+            <h3 className="text-white font-medium text-sm truncate">{searchQuery ? highlightText(prompt.title, searchQuery) : prompt.title}</h3>
           </div>
           <div className="flex items-center gap-1 ml-2 flex-shrink-0">
             <button
@@ -205,7 +209,7 @@ export default function PromptCard({ prompt, isSelected = false, isMultiSelectMo
 
         {/* Content preview */}
         <p className="text-xs text-white/60 line-clamp-2 mb-3">
-          {prompt.content}
+          {searchQuery ? highlightText(prompt.content, searchQuery) : prompt.content}
         </p>
 
         {/* Footer: tags */}
@@ -214,7 +218,7 @@ export default function PromptCard({ prompt, isSelected = false, isMultiSelectMo
             {promptTags.slice(0, 3).map((tag) => (
               <span
                 key={tag.id}
-                className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/15 text-white/80 truncate max-w-[80px]"
+                className={`text-[10px] px-1.5 py-0.5 rounded-full truncate max-w-[80px] ${getTagColorClass(tag.name)}`}
               >
                 {tag.name}
               </span>

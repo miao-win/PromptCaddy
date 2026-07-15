@@ -17,11 +17,11 @@ export const toggleCategoryPin = (id: string): Promise<number> => invoke('toggle
 // Tags
 export const getTags = (): Promise<Tag[]> => invoke('get_tags');
 
-export const createTag = (name: string, color: string): Promise<Tag> =>
-  invoke('create_tag', { name, color });
+export const createTag = (name: string): Promise<Tag> =>
+  invoke('create_tag', { name });
 
-export const updateTag = (id: string, name: string, color: string): Promise<void> =>
-  invoke('update_tag', { id, name, color });
+export const updateTag = (id: string, name: string): Promise<void> =>
+  invoke('update_tag', { id, name });
 
 export const deleteTag = (id: string): Promise<void> => invoke('delete_tag', { id });
 
@@ -40,6 +40,12 @@ export const updatePrompt = (id: string, title: string, content: string, remark?
 export const deletePrompt = (id: string): Promise<void> => invoke('delete_prompt', { id });
 
 export const toggleFavorite = (id: string): Promise<number> => invoke('toggle_favorite', { id });
+
+export const reorderPrompts = (orders: { id: string; sort_order: number }[]): Promise<void> =>
+  invoke('reorder_prompts', { orders });
+
+export const reorderCategories = (orders: { id: string; sort_order: number }[]): Promise<void> =>
+  invoke('reorder_categories', { orders });
 
 // Prompt-Tag relations
 export const addTagToPrompt = (promptId: string, tagId: string): Promise<void> =>
@@ -72,8 +78,18 @@ export const movePromptsToCategory = (promptIds: string[], categoryId?: string):
 export const exportPromptsJson = (promptIds: string[]): Promise<string> =>
   invoke('export_prompts_json', { promptIds });
 
+export const exportPromptsMarkdown = (promptIds: string[]): Promise<[string, string][]> =>
+  invoke('export_prompts_markdown', { promptIds });
+
+export const exportPromptsCsv = (promptIds: string[]): Promise<string> =>
+  invoke('export_prompts_csv', { promptIds });
+
 export const importPromptsJson = (jsonData: string, strategy: string): Promise<void> =>
   invoke('import_prompts_json', { jsonData, strategy });
+
+// Default export path
+export const getDefaultExportPath = (): Promise<string> =>
+  invoke('get_default_export_path');
 
 // Snapshot cleanup
 export const deleteAllSnapshots = (): Promise<void> => invoke('delete_all_snapshots');

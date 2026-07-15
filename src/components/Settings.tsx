@@ -9,7 +9,6 @@ import {
   Database,
   Keyboard,
   Palette,
-  Save,
   Download,
   Upload,
   Trash2,
@@ -19,8 +18,9 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { buildExportPath } from '../utils/exportPath';
+import { exportAndSave } from '../utils/export';
 import { applyTheme, applyGlassIntensity } from '../utils/theme';
+import { formatDateForSnapshot } from '../utils/date';
 import { SHORTCUTS } from '../utils/shortcuts';
 
 type SettingsTab = 'general' | 'data' | 'shortcuts' | 'appearance';
@@ -33,6 +33,7 @@ interface AppSettings {
   theme: 'light' | 'dark' | 'system';
   cardDensity: 'compact' | 'standard' | 'relaxed';
   glassIntensity: number;
+  autoSnapshotInterval: 1 | 5 | 10;
 }
 
 const SETTINGS_KEY = 'prompt-caddy-settings';
@@ -41,10 +42,11 @@ const defaultSettings: AppSettings = {
   language: 'zh-CN',
   startupBehavior: 'all',
   defaultExportFormat: 'json',
-  exportPath: 'D:\\downloads',
+  exportPath: '',
   theme: 'light',
   cardDensity: 'standard',
   glassIntensity: 50,
+  autoSnapshotInterval: 10,
 };
 
 function loadSettings(): AppSettings {
@@ -86,8 +88,6 @@ export default function Settings() {
   const { t, setLanguage } = useTranslation();
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [settings, setSettings] = useState<AppSettings>(loadSettings);
-  const [snapshotName, setSnapshotName] = useState('');
-  const [showCreateSnapshot, setShowCreateSnapshot] = useState(false);
 
   useEffect(() => {
     loadSnapshots();
@@ -122,9 +122,10 @@ export default function Settings() {
 
   const handleCreateSnapshot = async () => {
     try {
-      await createSnapshot(snapshotName || undefined);
-      setSnapshotName('');
-      setShowCreateSnapshot(false);
+      const dateStr = formatDateForSnapshot(new Date());
+      const manualCount = snapshots.filter(s => s.name?.startsWith(t('settings.saveSnapshot'))).length;
+      const seq = manualCount + 1;
+      await createSnapshot(`${t('settings.saveSnapshot')}${seq} - ${dateStr}`);
       toast.success(t('settings.msg.snapshotCreated'));
     } catch (error) {
       toast.error(t('settings.msg.snapshotCreateFailed'));
@@ -159,10 +160,15 @@ export default function Settings() {
 
   const handleExportAll = async () => {
     try {
-      const jsonData = await api.exportPromptsJson([]);
-      const filename = `prompt_caddy_export_${new Date().toISOString().slice(0, 10)}.json`;
-      const fullPath = buildExportPath(filename);
-      await api.saveFileToPath(fullPath, jsonData);
+      const allPrompts = await api.getPrompts();
+      if (allPrompts.length === 0) {
+        toast.error(t('settings.msg.exportEmptyPrompt'));
+        return;
+      }
+      if (!confirm(t('settings.confirm.exportAll'))) return;
+      const ids = allPrompts.map((p) => p.id);
+      const filename = `prompt_caddy_export_${new Date().toISOString().slice(0, 10)}`;
+      const fullPath = await exportAndSave(ids, filename);
       toast.success(t('settings.msg.exportedTo', { path: fullPath }));
     } catch (error) {
       toast.error(t('settings.msg.exportFailed', { error: String(error) }));
@@ -291,6 +297,25 @@ export default function Settings() {
           ))}
         </div>
       </div>
+
+      <div>
+        <h3 className="text-white font-medium mb-3">{t('settings.autoSnapshotInterval')}</h3>
+        <div className="flex gap-2">
+          {([1, 5, 10] as const).map((interval) => (
+            <button
+              key={interval}
+              onClick={() => updateSettings({ autoSnapshotInterval: interval })}
+              className={`px-4 py-2 rounded-lg text-sm transition-colors ${
+                settings.autoSnapshotInterval === interval
+                  ? 'bg-white/20 text-white'
+                  : 'text-white/70 hover:bg-white/10'
+              }`}
+            >
+              {interval} min
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 
@@ -314,7 +339,7 @@ export default function Settings() {
             type="text"
             value={settings.exportPath}
             onChange={(e) => updateSettings({ exportPath: e.target.value })}
-            placeholder="D:\downloads"
+            placeholder={t('settings.exportPathPlaceholder')}
             className="flex-1 px-3 py-2 glass-input text-white placeholder-white/50 text-sm"
           />
           <button
@@ -352,7 +377,7 @@ export default function Settings() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-white font-medium">{t('settings.snapshotManagement')}</h3>
           <button
-            onClick={() => setShowCreateSnapshot(true)}
+            onClick={handleCreateSnapshot}
             className="flex items-center gap-1.5 px-3 py-1.5 glass-button text-white text-sm"
           >
             <Plus size={14} />
@@ -360,40 +385,19 @@ export default function Settings() {
           </button>
         </div>
 
-        {showCreateSnapshot && (
-          <div className="glass-card p-3 mb-3">
-            <input
-              type="text"
-              value={snapshotName}
-              onChange={(e) => setSnapshotName(e.target.value)}
-              placeholder={t('settings.snapshotName')}
-              className="w-full px-3 py-2 glass-input text-white placeholder-white/50 mb-2"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateSnapshot();
-                if (e.key === 'Escape') setShowCreateSnapshot(false);
-              }}
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setShowCreateSnapshot(false)}
-                className="px-3 py-1.5 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded"
-              >
-                {t('sidebar.cancel')}
-              </button>
-              <button
-                onClick={handleCreateSnapshot}
-                className="flex items-center gap-1.5 px-3 py-1.5 glass-button text-white text-sm"
-              >
-                <Save size={14} />
-                {t('edit.save')}
-              </button>
-            </div>
-          </div>
-        )}
-
         <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
-          {snapshots.map((snapshot) => (
+          {[...snapshots].sort((a, b) => {
+            const getPriority = (s: Snapshot) => {
+              const name = s.name || '';
+              if (name.startsWith(t('app.startupSnapshot'))) return 2;
+              if (name.startsWith(t('app.autoSaveSnapshot'))) return 1;
+              return 0;
+            };
+            const pa = getPriority(a);
+            const pb = getPriority(b);
+            if (pa !== pb) return pa - pb;
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          }).map((snapshot) => (
             <div key={snapshot.id} className="glass-card p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

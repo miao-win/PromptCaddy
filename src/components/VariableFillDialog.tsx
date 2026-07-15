@@ -58,11 +58,9 @@ export default function VariableFillDialog({ content, onCopy, onClose }: Variabl
     }
   };
 
-  const allFilled = Array.from(variables.values()).every((v) => v.trim() !== '');
-
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm dialog-backdrop"
       onClick={onClose}
       onKeyDown={handleKeyDown}
     >
@@ -130,8 +128,7 @@ export default function VariableFillDialog({ content, onCopy, onClose }: Variabl
             </button>
             <button
               onClick={handleCopy}
-              disabled={!allFilled}
-              className="flex items-center gap-1.5 px-4 py-2 glass-button text-white text-sm disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2 glass-button text-white text-sm"
             >
               <Copy size={16} />
               {t('variable.confirmCopy')}

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../i18n';
 import PromptCard from './PromptCard';
+import DraggablePromptCard from './DraggablePromptCard';
 import { Plus, ArrowUpDown, Star, CheckSquare, X, Trash2, FolderInput, FileDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getFlatCategoryList } from '../utils/category';
@@ -18,6 +19,7 @@ export default function ContentArea({ onPromptFocus }: ContentAreaProps) {
     prompts,
     searchResults,
     isSearching,
+    searchQuery,
     selectedCategory,
     isFavoritesOnly,
     categories,
@@ -61,6 +63,9 @@ export default function ContentArea({ onPromptFocus }: ContentAreaProps) {
   };
 
   const displayPrompts = getDisplayPrompts();
+
+  // Drag is disabled when searching, in favorites mode, or using non-default sort
+  const isDragDisabled = isSearching || isFavoritesOnly || sortBy !== 'title-asc';
 
   const handleNewPrompt = () => {
     setIsCreating(true);
@@ -275,15 +280,27 @@ export default function ContentArea({ onPromptFocus }: ContentAreaProps) {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {displayPrompts.map((prompt) => (
-              <PromptCard
-                key={prompt.id}
-                prompt={prompt}
-                isSelected={selectedPrompts.has(prompt.id)}
-                isMultiSelectMode={isMultiSelectMode}
-                onFocus={onPromptFocus}
-              />
-            ))}
+            {displayPrompts.map((prompt) =>
+              isDragDisabled ? (
+                <PromptCard
+                  key={prompt.id}
+                  prompt={prompt}
+                  isSelected={selectedPrompts.has(prompt.id)}
+                  isMultiSelectMode={isMultiSelectMode}
+                  onFocus={onPromptFocus}
+                  searchQuery={isSearching ? searchQuery : undefined}
+                />
+              ) : (
+                <DraggablePromptCard
+                  key={prompt.id}
+                  prompt={prompt}
+                  isSelected={selectedPrompts.has(prompt.id)}
+                  isMultiSelectMode={isMultiSelectMode}
+                  onFocus={onPromptFocus}
+                  searchQuery={isSearching ? searchQuery : undefined}
+                />
+              )
+            )}
           </div>
         )}
       </div>

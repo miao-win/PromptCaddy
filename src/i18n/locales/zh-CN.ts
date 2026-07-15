@@ -1,6 +1,7 @@
 const zhCN: Record<string, string> = {
   // App
   'app.startupSnapshot': '启动快照',
+  'app.autoSaveSnapshot': '固定保存',
 
   // Sidebar
   'sidebar.appTitle': 'Prompt 管理工具',
@@ -34,8 +35,10 @@ const zhCN: Record<string, string> = {
   'sidebar.msg.unpinSuccess': '已取消置顶',
   'sidebar.msg.pinFailed': '置顶操作失败',
   'sidebar.msg.noPromptInCategory': '该分类下没有 Prompt',
+  'sidebar.confirm.exportCategory': '确定要导出分类「{name}」下的所有 Prompt 吗？',
   'sidebar.msg.exportedTo': '已导出到: {path}',
   'sidebar.msg.exportFailed': '导出失败: {error}',
+  'sidebar.msg.reorderFailed': '调整顺序失败',
   'sidebar.confirm.deleteCategory': '确定要删除分类「{name}」吗？分类下的 Prompt 将变为未分类状态。',
   'sidebar.confirm.deleteCategorySimple': '确定要删除此分类吗？分类下的Prompt将变为未分类状态。',
 
@@ -63,9 +66,11 @@ const zhCN: Record<string, string> = {
   'content.msg.batchDeleteFailed': '批量删除失败',
   'content.msg.batchMoveSuccess': '批量移动成功',
   'content.msg.moveFailed': '移动失败',
+  'content.msg.reorderFailed': '调整顺序失败',
   'content.msg.exportedTo': '已导出到: {path}',
   'content.msg.exportFailed': '导出失败: {error}',
   'content.confirm.batchDelete': '确定要删除选中的 {count} 个 Prompt 吗？',
+  'content.confirm.export': '确定要导出选中的 {count} 个 Prompt 吗？',
 
   // EditPanel
   'edit.newPrompt': '新建 Prompt',
@@ -119,6 +124,7 @@ const zhCN: Record<string, string> = {
   'card.msg.exportedTo': '已导出到: {path}',
   'card.msg.exportFailed': '导出失败: {error}',
   'card.confirm.delete': '确定要删除此 Prompt 吗？',
+  'card.confirm.export': '确定要导出此 Prompt 吗？',
 
   // SearchBar
   'search.placeholder': '搜索 Prompt... (Ctrl+F)',
@@ -155,7 +161,8 @@ const zhCN: Record<string, string> = {
   // Settings - Data
   'settings.exportPath': '导出路径',
   'settings.browse': '浏览',
-  'settings.exportPathHint': '导出文件将保存到此目录，路径不存在时默认使用 D:\\downloads',
+  'settings.exportPathHint': '导出文件将保存到此目录，留空则使用系统默认下载目录',
+  'settings.exportPathPlaceholder': '留空使用系统默认路径',
   'settings.dataExportImport': '数据导出与导入',
   'settings.exportAll': '全量导出',
   'settings.importAll': '全量导入',
@@ -188,6 +195,7 @@ const zhCN: Record<string, string> = {
   'settings.densityStandard': '标准',
   'settings.densityRelaxed': '宽松',
   'settings.glassIntensity': '玻璃效果强度',
+  'settings.autoSnapshotInterval': '自动保存间隔',
   'settings.glassWeak': '弱',
   'settings.glassStrong': '强',
 
@@ -200,6 +208,7 @@ const zhCN: Record<string, string> = {
   'settings.msg.snapshotDeleteFailed': '删除快照失败',
   'settings.msg.exportedTo': '已导出到: {path}',
   'settings.msg.exportFailed': '导出失败: {error}',
+  'settings.msg.exportEmptyPrompt': '当前没有 Prompt，无法导出',
   'settings.msg.importSuccess': '导入成功',
   'settings.msg.importFailed': '导入失败：文件格式错误',
   'settings.msg.importFailedGeneric': '导入失败',
@@ -211,6 +220,7 @@ const zhCN: Record<string, string> = {
   'settings.confirm.clearData': '确定要清空所有数据吗？此操作不可恢复，所有 Prompt、分类、标签数据将被永久删除。',
   'settings.confirm.clearDataAgain': '再次确认：此操作不可撤销，确定继续吗？',
   'settings.confirm.importOverwrite': '是否覆盖现有数据？\n\n确定 = 覆盖\n取消 = 跳过重复',
+  'settings.confirm.exportAll': '确定要全量导出所有数据吗？',
   'settings.snapshotDefault': '启动快照',
 
   // TagManagement
@@ -225,7 +235,7 @@ const zhCN: Record<string, string> = {
 
   // VariableFillDialog
   'variable.title': '填充变量',
-  'variable.description': '检测到以下变量，请填写对应的值：',
+  'variable.description': '检测到以下变量，请填写对应的值（未填写的将保留占位符）：',
   'variable.placeholder': '输入 {name} 的值',
   'variable.preview': '预览：',
   'variable.shortcutHint': 'Ctrl+Enter 快速复制',
@@ -257,19 +267,19 @@ const zhCN: Record<string, string> = {
   'about.feature.category': '树状分类',
   'about.feature.categoryDesc': '最多支持 3 层分类，右键可管理',
   'about.feature.tag': '标签系统',
-  'about.feature.tagDesc': '自定义彩色标签，灵活归类',
+  'about.feature.tagDesc': '自定义标签，灵活归类',
   'about.feature.copy': '快速复制',
   'about.feature.copyDesc': '一键复制，支持变量占位符填充',
   'about.feature.search': '全文搜索',
   'about.feature.searchDesc': '即时搜索标题和正文内容',
   'about.feature.snapshot': '快照回退',
-  'about.feature.snapshotDesc': '自动保存启动快照，随时回退',
+  'about.feature.snapshotDesc': '启动快照、定时自动保存、手动快照，随时回退',
   'about.shortcuts.title': '快捷键',
   'about.tips.title': '使用技巧',
   'about.tips.variable': '在正文中使用 {{变量名}} 格式的占位符，复制时会弹出填写对话框',
   'about.tips.rightClick': '右键点击分类或卡片可以展开更多操作菜单',
-  'about.tips.dragDrop': '在设置中可以配置默认导出路径，方便批量导出',
-  'about.tips.snapshot': '每次启动会自动创建快照，可在设置中手动创建快照或回退到历史版本',
+  'about.tips.dragDrop': '拖拽 Prompt 卡片到侧边栏分类上，可以快速修改 Prompt 的分类',
+  'about.tips.snapshot': '每次启动会自动创建快照，并按设定间隔定时保存。可在设置中调整自动保存间隔（1/5/10 分钟），或手动创建快照、回退到历史版本',
 };
 
 export default zhCN;

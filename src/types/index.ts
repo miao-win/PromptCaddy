@@ -9,7 +9,6 @@ export interface Category {
 export interface Tag {
   id: string;
   name: string;
-  color: string;
 }
 
 export interface Prompt {
@@ -19,6 +18,7 @@ export interface Prompt {
   remark: string | null;
   category_id: string | null;
   is_favorite: number;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }

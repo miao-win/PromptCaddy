@@ -47,6 +47,8 @@ fn main() {
             commands::update_prompt,
             commands::delete_prompt,
             commands::toggle_favorite,
+            commands::reorder_prompts,
+            commands::reorder_categories,
             // Prompt-Tag relations
             commands::add_tag_to_prompt,
             commands::remove_tag_from_prompt,
@@ -71,6 +73,7 @@ fn main() {
             // File system
             commands::save_file_to_path,
             commands::pick_directory,
+            commands::get_default_export_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
