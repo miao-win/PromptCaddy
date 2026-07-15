@@ -9,6 +9,7 @@ pub struct Category {
     pub name: String,
     pub parent_id: Option<String>,
     pub sort_order: i32,
+    pub is_pinned: i32,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -71,6 +72,7 @@ impl Database {
                 name TEXT NOT NULL,
                 parent_id TEXT,
                 sort_order INTEGER NOT NULL DEFAULT 0,
+                is_pinned INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (parent_id) REFERENCES categories(id)
             );
 
@@ -130,13 +132,19 @@ impl Database {
             END;
         ")?;
 
+        // Migration: add is_pinned column to categories if not exists
+        let _ = self.conn.execute(
+            "ALTER TABLE categories ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+
         Ok(())
     }
 
     // Categories
     pub fn get_categories(&self) -> Result<Vec<Category>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, parent_id, sort_order FROM categories ORDER BY sort_order"
+            "SELECT id, name, parent_id, sort_order, is_pinned FROM categories ORDER BY is_pinned DESC, sort_order"
         )?;
 
         let categories = stmt.query_map([], |row| {
@@ -145,6 +153,7 @@ impl Database {
                 name: row.get(1)?,
                 parent_id: row.get(2)?,
                 sort_order: row.get(3)?,
+                is_pinned: row.get(4)?,
             })
         })?.collect::<Result<Vec<_>>>()?;
 
@@ -168,7 +177,7 @@ impl Database {
         )?;
 
         self.conn.execute(
-            "INSERT INTO categories (id, name, parent_id, sort_order) VALUES (?, ?, ?, ?)",
+            "INSERT INTO categories (id, name, parent_id, sort_order, is_pinned) VALUES (?, ?, ?, ?, 0)",
             params![id, name, parent_id, max_order + 1],
         )?;
 
@@ -177,6 +186,7 @@ impl Database {
             name: name.to_string(),
             parent_id: parent_id.map(|s| s.to_string()),
             sort_order: max_order + 1,
+            is_pinned: 0,
         })
     }
 
@@ -189,23 +199,8 @@ impl Database {
     }
 
     pub fn delete_category(&self, id: &str) -> Result<()> {
-        // Collect all descendant category IDs using recursive CTE
-        let mut descendant_ids: Vec<String> = vec![id.to_string()];
-        let mut to_process = vec![id.to_string()];
-
-        while let Some(current_id) = to_process.pop() {
-            let mut stmt = self.conn.prepare(
-                "SELECT id FROM categories WHERE parent_id = ?"
-            )?;
-            let children: Vec<String> = stmt.query_map(params![current_id], |row| {
-                row.get(0)
-            })?.collect::<Result<Vec<_>>>()?;
-
-            for child_id in children {
-                descendant_ids.push(child_id.clone());
-                to_process.push(child_id);
-            }
-        }
+        // Collect all descendant category IDs (including self)
+        let descendant_ids = self.get_all_descendant_ids(id)?;
 
         // Move prompts in all descendant categories to uncategorized
         for cid in &descendant_ids {
@@ -217,8 +212,9 @@ impl Database {
 
         // Delete all descendant categories (children first, then parents)
         // Reverse to delete deepest first
-        descendant_ids.reverse();
-        for cid in &descendant_ids {
+        let mut delete_ids = descendant_ids.clone();
+        delete_ids.reverse();
+        for cid in &delete_ids {
             self.conn.execute(
                 "DELETE FROM categories WHERE id = ?",
                 params![cid],
@@ -226,6 +222,22 @@ impl Database {
         }
 
         Ok(())
+    }
+
+    pub fn toggle_category_pin(&self, id: &str) -> Result<i32> {
+        let current: i32 = self.conn.query_row(
+            "SELECT is_pinned FROM categories WHERE id = ?",
+            params![id],
+            |row| row.get(0),
+        )?;
+
+        let new_value = if current == 0 { 1 } else { 0 };
+        self.conn.execute(
+            "UPDATE categories SET is_pinned = ? WHERE id = ?",
+            params![new_value, id],
+        )?;
+
+        Ok(new_value)
     }
 
     /// Returns the depth of the given category from the root (root = 1).
@@ -475,8 +487,8 @@ impl Database {
 
     // Search
     pub fn search_prompts(&self, query: &str) -> Result<Vec<SearchResult>> {
-        // Sanitize FTS5 query: escape special characters
-        let sanitized = query.replace('"', "\"\"").replace('*', "").replace('-', "");
+        // Sanitize FTS5 query: escape double quotes inside the phrase query
+        let sanitized = query.replace('"', "\"\"");
         let fts_query = format!("\"{}\"", sanitized);
 
         let mut stmt = self.conn.prepare(
@@ -504,11 +516,16 @@ impl Database {
         let prompts = match prompts {
             Ok(p) if !p.is_empty() => p,
             _ => {
-                let like_pattern = format!("%{}%", query);
+                // Escape LIKE wildcards to prevent injection
+                let escaped_query = query
+                    .replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_");
+                let like_pattern = format!("%{}%", escaped_query);
                 let mut fallback_stmt = self.conn.prepare(
                     "SELECT id, title, content, remark, category_id, is_favorite, created_at, updated_at
                      FROM prompts
-                     WHERE title LIKE ?1 OR content LIKE ?1 OR remark LIKE ?1
+                     WHERE title LIKE ?1 ESCAPE '\\' OR content LIKE ?1 ESCAPE '\\' OR remark LIKE ?1 ESCAPE '\\'
                      ORDER BY title ASC"
                 )?;
                 let rows = fallback_stmt.query_map(params![like_pattern], |row| {
@@ -527,24 +544,12 @@ impl Database {
             }
         };
 
-        let query_lower = query.to_lowercase();
         let mut results = Vec::new();
 
         for prompt in prompts {
-            // Check if the prompt itself matches (title, content, remark)
-            let prompt_matches = prompt.title.to_lowercase().contains(&query_lower)
-                || prompt.content.to_lowercase().contains(&query_lower)
-                || prompt.remark.as_ref().map_or(false, |r| r.to_lowercase().contains(&query_lower));
-
-            let match_source = if prompt_matches {
-                "prompt".to_string()
-            } else {
-                "prompt".to_string()
-            };
-
             results.push(SearchResult {
                 prompt,
-                match_source,
+                match_source: "prompt".to_string(),
             });
         }
 
@@ -569,17 +574,13 @@ impl Database {
         Ok(snapshots)
     }
 
-    pub fn create_snapshot(&self, name: Option<&str>) -> Result<Snapshot> {
-        let id = Uuid::new_v4().to_string();
-        let now = Utc::now().to_rfc3339();
-
-        // Collect all data
+    /// Collect all data (categories, tags, prompts, prompt_tags) for export/snapshot.
+    fn collect_all_data(&self) -> Result<(Vec<Category>, Vec<Tag>, Vec<Prompt>, Vec<PromptTag>)> {
         let categories = self.get_categories()?;
         let tags = self.get_tags()?;
         let prompts = self.get_prompts(None, false)?;
 
         let mut all_prompt_tags = Vec::new();
-
         for prompt in &prompts {
             let tags = self.get_prompt_tags(&prompt.id)?;
             for tag in tags {
@@ -590,6 +591,15 @@ impl Database {
                 });
             }
         }
+
+        Ok((categories, tags, prompts, all_prompt_tags))
+    }
+
+    pub fn create_snapshot(&self, name: Option<&str>) -> Result<Snapshot> {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+
+        let (categories, tags, prompts, all_prompt_tags) = self.collect_all_data()?;
 
         let snapshot_data = serde_json::json!({
             "categories": categories,
@@ -628,74 +638,91 @@ impl Database {
         let data: serde_json::Value = serde_json::from_str(&snapshot.snapshot_data)
             .map_err(|_| rusqlite::Error::InvalidParameterName("Invalid snapshot data".to_string()))?;
 
-        // Clear all data
-        self.conn.execute("DELETE FROM prompt_tags", [])?;
-        self.conn.execute("DELETE FROM prompts", [])?;
-        self.conn.execute("DELETE FROM tags", [])?;
-        self.conn.execute("DELETE FROM categories", [])?;
+        // Wrap clear + restore in a transaction so a mid-way failure doesn't lose all data
+        self.conn.execute("BEGIN TRANSACTION", [])?;
 
-        // Restore categories
-        if let Some(categories) = data["categories"].as_array() {
-            for cat in categories {
-                self.conn.execute(
-                    "INSERT INTO categories (id, name, parent_id, sort_order) VALUES (?, ?, ?, ?)",
-                    params![
-                        cat["id"].as_str().unwrap(),
-                        cat["name"].as_str().unwrap(),
-                        cat["parent_id"].as_str(),
-                        cat["sort_order"].as_i64().unwrap() as i32,
-                    ],
-                )?;
+        let result = (|| -> Result<()> {
+            // Clear all data
+            self.conn.execute("DELETE FROM prompt_tags", [])?;
+            self.conn.execute("DELETE FROM prompts", [])?;
+            self.conn.execute("DELETE FROM tags", [])?;
+            self.conn.execute("DELETE FROM categories", [])?;
+
+            // Restore categories
+            if let Some(categories) = data["categories"].as_array() {
+                for cat in categories {
+                    self.conn.execute(
+                        "INSERT INTO categories (id, name, parent_id, sort_order, is_pinned) VALUES (?, ?, ?, ?, ?)",
+                        params![
+                            cat["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category id".into()))?,
+                            cat["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category name".into()))?,
+                            cat["parent_id"].as_str(),
+                            cat["sort_order"].as_i64().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category sort_order".into()))? as i32,
+                            cat["is_pinned"].as_i64().unwrap_or(0) as i32,
+                        ],
+                    )?;
+                }
+            }
+
+            // Restore tags
+            if let Some(tags) = data["tags"].as_array() {
+                for tag in tags {
+                    self.conn.execute(
+                        "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
+                        params![
+                            tag["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag id".into()))?,
+                            tag["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag name".into()))?,
+                            tag["color"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag color".into()))?,
+                        ],
+                    )?;
+                }
+            }
+
+            // Restore prompts
+            if let Some(prompts) = data["prompts"].as_array() {
+                for prompt in prompts {
+                    self.conn.execute(
+                        "INSERT INTO prompts (id, title, content, remark, category_id, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        params![
+                            prompt["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt id".into()))?,
+                            prompt["title"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt title".into()))?,
+                            prompt["content"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt content".into()))?,
+                            prompt["remark"].as_str(),
+                            prompt["category_id"].as_str(),
+                            prompt["is_favorite"].as_i64().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt is_favorite".into()))? as i32,
+                            prompt["created_at"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt created_at".into()))?,
+                            prompt["updated_at"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt updated_at".into()))?,
+                        ],
+                    )?;
+                }
+            }
+
+            // Restore prompt_tags
+            if let Some(prompt_tags) = data["prompt_tags"].as_array() {
+                for pt in prompt_tags {
+                    self.conn.execute(
+                        "INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)",
+                        params![
+                            pt["prompt_id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt_tag prompt_id".into()))?,
+                            pt["tag_id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt_tag tag_id".into()))?,
+                        ],
+                    )?;
+                }
+            }
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                self.conn.execute("COMMIT", [])?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = self.conn.execute("ROLLBACK", []);
+                Err(e)
             }
         }
-
-        // Restore tags
-        if let Some(tags) = data["tags"].as_array() {
-            for tag in tags {
-                self.conn.execute(
-                    "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
-                    params![
-                        tag["id"].as_str().unwrap(),
-                        tag["name"].as_str().unwrap(),
-                        tag["color"].as_str().unwrap(),
-                    ],
-                )?;
-            }
-        }
-
-        // Restore prompts
-        if let Some(prompts) = data["prompts"].as_array() {
-            for prompt in prompts {
-                self.conn.execute(
-                    "INSERT INTO prompts (id, title, content, remark, category_id, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    params![
-                        prompt["id"].as_str().unwrap(),
-                        prompt["title"].as_str().unwrap(),
-                        prompt["content"].as_str().unwrap(),
-                        prompt["remark"].as_str(),
-                        prompt["category_id"].as_str(),
-                        prompt["is_favorite"].as_i64().unwrap() as i32,
-                        prompt["created_at"].as_str().unwrap(),
-                        prompt["updated_at"].as_str().unwrap(),
-                    ],
-                )?;
-            }
-        }
-
-        // Restore prompt_tags
-        if let Some(prompt_tags) = data["prompt_tags"].as_array() {
-            for pt in prompt_tags {
-                self.conn.execute(
-                    "INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)",
-                    params![
-                        pt["prompt_id"].as_str().unwrap(),
-                        pt["tag_id"].as_str().unwrap(),
-                    ],
-                )?;
-            }
-        }
-
-        Ok(())
     }
 
     pub fn delete_snapshot(&self, id: &str) -> Result<()> {
@@ -713,11 +740,25 @@ impl Database {
 
     // Export
     pub fn clear_all_data(&self) -> Result<()> {
-        self.conn.execute("DELETE FROM prompt_tags", [])?;
-        self.conn.execute("DELETE FROM prompts", [])?;
-        self.conn.execute("DELETE FROM tags", [])?;
-        self.conn.execute("DELETE FROM categories", [])?;
-        Ok(())
+        self.conn.execute("BEGIN TRANSACTION", [])?;
+        let result = (|| -> Result<()> {
+            self.conn.execute("DELETE FROM prompt_tags", [])?;
+            self.conn.execute("DELETE FROM prompts", [])?;
+            self.conn.execute("DELETE FROM tags", [])?;
+            self.conn.execute("DELETE FROM categories", [])?;
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => {
+                self.conn.execute("COMMIT", [])?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = self.conn.execute("ROLLBACK", []);
+                Err(e)
+            }
+        }
     }
 
     pub fn move_prompts_to_category(&self, prompt_ids: &[String], category_id: Option<&str>) -> Result<()> {
@@ -731,22 +772,7 @@ impl Database {
     }
 
     pub fn export_all_json(&self) -> Result<String> {
-        let categories = self.get_categories()?;
-        let tags = self.get_tags()?;
-        let prompts = self.get_prompts(None, false)?;
-
-        let mut all_prompt_tags = Vec::new();
-
-        for prompt in &prompts {
-            let tags = self.get_prompt_tags(&prompt.id)?;
-            for tag in tags {
-                all_prompt_tags.push(PromptTag {
-                    id: 0,
-                    prompt_id: prompt.id.clone(),
-                    tag_id: tag.id,
-                });
-            }
-        }
+        let (categories, tags, prompts, all_prompt_tags) = self.collect_all_data()?;
 
         let export_data = serde_json::json!({
             "categories": categories,
@@ -812,14 +838,26 @@ impl Database {
 
         match strategy {
             "overwrite" => {
-                // Clear existing data
-                self.conn.execute("DELETE FROM prompt_tags", [])?;
-                self.conn.execute("DELETE FROM prompts", [])?;
-                self.conn.execute("DELETE FROM tags", [])?;
-                self.conn.execute("DELETE FROM categories", [])?;
+                // Wrap clear + import in a transaction for atomicity
+                self.conn.execute("BEGIN TRANSACTION", [])?;
+                let result = (|| -> Result<()> {
+                    self.conn.execute("DELETE FROM prompt_tags", [])?;
+                    self.conn.execute("DELETE FROM prompts", [])?;
+                    self.conn.execute("DELETE FROM tags", [])?;
+                    self.conn.execute("DELETE FROM categories", [])?;
+                    self.import_data(&data)?;
+                    Ok(())
+                })();
 
-                // Import all
-                self.import_data(&data)?;
+                match result {
+                    Ok(()) => {
+                        self.conn.execute("COMMIT", [])?;
+                    }
+                    Err(e) => {
+                        let _ = self.conn.execute("ROLLBACK", []);
+                        return Err(e);
+                    }
+                }
             }
             "skip" => {
                 // Only import if not exists
@@ -840,12 +878,13 @@ impl Database {
         if let Some(categories) = data["categories"].as_array() {
             for cat in categories {
                 self.conn.execute(
-                    "INSERT OR REPLACE INTO categories (id, name, parent_id, sort_order) VALUES (?, ?, ?, ?)",
+                    "INSERT OR REPLACE INTO categories (id, name, parent_id, sort_order, is_pinned) VALUES (?, ?, ?, ?, ?)",
                     params![
-                        cat["id"].as_str().unwrap(),
-                        cat["name"].as_str().unwrap(),
+                        cat["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category id".into()))?,
+                        cat["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category name".into()))?,
                         cat["parent_id"].as_str(),
-                        cat["sort_order"].as_i64().unwrap() as i32,
+                        cat["sort_order"].as_i64().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category sort_order".into()))? as i32,
+                        cat["is_pinned"].as_i64().unwrap_or(0) as i32,
                     ],
                 )?;
             }
@@ -857,9 +896,9 @@ impl Database {
                 self.conn.execute(
                     "INSERT OR REPLACE INTO tags (id, name, color) VALUES (?, ?, ?)",
                     params![
-                        tag["id"].as_str().unwrap(),
-                        tag["name"].as_str().unwrap(),
-                        tag["color"].as_str().unwrap(),
+                        tag["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag id".into()))?,
+                        tag["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag name".into()))?,
+                        tag["color"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag color".into()))?,
                     ],
                 )?;
             }
@@ -871,14 +910,14 @@ impl Database {
                 self.conn.execute(
                     "INSERT OR REPLACE INTO prompts (id, title, content, remark, category_id, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     params![
-                        prompt["id"].as_str().unwrap(),
-                        prompt["title"].as_str().unwrap(),
-                        prompt["content"].as_str().unwrap(),
+                        prompt["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt id".into()))?,
+                        prompt["title"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt title".into()))?,
+                        prompt["content"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt content".into()))?,
                         prompt["remark"].as_str(),
                         prompt["category_id"].as_str(),
-                        prompt["is_favorite"].as_i64().unwrap() as i32,
-                        prompt["created_at"].as_str().unwrap(),
-                        prompt["updated_at"].as_str().unwrap(),
+                        prompt["is_favorite"].as_i64().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt is_favorite".into()))? as i32,
+                        prompt["created_at"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt created_at".into()))?,
+                        prompt["updated_at"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt updated_at".into()))?,
                     ],
                 )?;
             }
@@ -890,8 +929,8 @@ impl Database {
                 self.conn.execute(
                     "INSERT OR IGNORE INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)",
                     params![
-                        pt["prompt_id"].as_str().unwrap(),
-                        pt["tag_id"].as_str().unwrap(),
+                        pt["prompt_id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt_tag prompt_id".into()))?,
+                        pt["tag_id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt_tag tag_id".into()))?,
                     ],
                 )?;
             }
@@ -904,20 +943,22 @@ impl Database {
         // Import categories if not exists
         if let Some(categories) = data["categories"].as_array() {
             for cat in categories {
+                let cat_id = cat["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category id".into()))?;
                 let exists: bool = self.conn.query_row(
                     "SELECT COUNT(*) > 0 FROM categories WHERE id = ?",
-                    params![cat["id"].as_str().unwrap()],
+                    params![cat_id],
                     |row| row.get(0),
                 )?;
 
                 if !exists {
                     self.conn.execute(
-                        "INSERT INTO categories (id, name, parent_id, sort_order) VALUES (?, ?, ?, ?)",
+                        "INSERT INTO categories (id, name, parent_id, sort_order, is_pinned) VALUES (?, ?, ?, ?, ?)",
                         params![
-                            cat["id"].as_str().unwrap(),
-                            cat["name"].as_str().unwrap(),
+                            cat_id,
+                            cat["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category name".into()))?,
                             cat["parent_id"].as_str(),
-                            cat["sort_order"].as_i64().unwrap() as i32,
+                            cat["sort_order"].as_i64().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category sort_order".into()))? as i32,
+                            cat["is_pinned"].as_i64().unwrap_or(0) as i32,
                         ],
                     )?;
                 }
@@ -927,9 +968,10 @@ impl Database {
         // Import tags if not exists
         if let Some(tags) = data["tags"].as_array() {
             for tag in tags {
+                let tag_id = tag["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag id".into()))?;
                 let exists: bool = self.conn.query_row(
                     "SELECT COUNT(*) > 0 FROM tags WHERE id = ?",
-                    params![tag["id"].as_str().unwrap()],
+                    params![tag_id],
                     |row| row.get(0),
                 )?;
 
@@ -937,9 +979,9 @@ impl Database {
                     self.conn.execute(
                         "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
                         params![
-                            tag["id"].as_str().unwrap(),
-                            tag["name"].as_str().unwrap(),
-                            tag["color"].as_str().unwrap(),
+                            tag_id,
+                            tag["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag name".into()))?,
+                            tag["color"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag color".into()))?,
                         ],
                     )?;
                 }
@@ -949,9 +991,10 @@ impl Database {
         // Import prompts if not exists
         if let Some(prompts) = data["prompts"].as_array() {
             for prompt in prompts {
+                let prompt_id = prompt["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt id".into()))?;
                 let exists: bool = self.conn.query_row(
                     "SELECT COUNT(*) > 0 FROM prompts WHERE id = ?",
-                    params![prompt["id"].as_str().unwrap()],
+                    params![prompt_id],
                     |row| row.get(0),
                 )?;
 
@@ -959,14 +1002,14 @@ impl Database {
                     self.conn.execute(
                         "INSERT INTO prompts (id, title, content, remark, category_id, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                         params![
-                            prompt["id"].as_str().unwrap(),
-                            prompt["title"].as_str().unwrap(),
-                            prompt["content"].as_str().unwrap(),
+                            prompt_id,
+                            prompt["title"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt title".into()))?,
+                            prompt["content"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt content".into()))?,
                             prompt["remark"].as_str(),
                             prompt["category_id"].as_str(),
-                            prompt["is_favorite"].as_i64().unwrap() as i32,
-                            prompt["created_at"].as_str().unwrap(),
-                            prompt["updated_at"].as_str().unwrap(),
+                            prompt["is_favorite"].as_i64().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt is_favorite".into()))? as i32,
+                            prompt["created_at"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt created_at".into()))?,
+                            prompt["updated_at"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt updated_at".into()))?,
                         ],
                     )?;
                 }
@@ -979,8 +1022,8 @@ impl Database {
                 self.conn.execute(
                     "INSERT OR IGNORE INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)",
                     params![
-                        pt["prompt_id"].as_str().unwrap(),
-                        pt["tag_id"].as_str().unwrap(),
+                        pt["prompt_id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt_tag prompt_id".into()))?,
+                        pt["tag_id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt_tag tag_id".into()))?,
                     ],
                 )?;
             }
@@ -998,17 +1041,18 @@ impl Database {
         // Import categories with new IDs
         if let Some(categories) = data["categories"].as_array() {
             for cat in categories {
-                let old_id = cat["id"].as_str().unwrap().to_string();
+                let old_id = cat["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category id".into()))?.to_string();
                 let new_id = Uuid::new_v4().to_string();
                 category_id_map.insert(old_id, new_id.clone());
 
                 self.conn.execute(
-                    "INSERT INTO categories (id, name, parent_id, sort_order) VALUES (?, ?, ?, ?)",
+                    "INSERT INTO categories (id, name, parent_id, sort_order, is_pinned) VALUES (?, ?, ?, ?, ?)",
                     params![
                         new_id,
-                        cat["name"].as_str().unwrap(),
+                        cat["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category name".into()))?,
                         cat["parent_id"].as_str(),
-                        cat["sort_order"].as_i64().unwrap() as i32,
+                        cat["sort_order"].as_i64().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing category sort_order".into()))? as i32,
+                        cat["is_pinned"].as_i64().unwrap_or(0) as i32,
                     ],
                 )?;
             }
@@ -1017,7 +1061,7 @@ impl Database {
         // Import tags with new IDs
         if let Some(tags) = data["tags"].as_array() {
             for tag in tags {
-                let old_id = tag["id"].as_str().unwrap().to_string();
+                let old_id = tag["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag id".into()))?.to_string();
                 let new_id = Uuid::new_v4().to_string();
                 tag_id_map.insert(old_id, new_id.clone());
 
@@ -1025,8 +1069,8 @@ impl Database {
                     "INSERT INTO tags (id, name, color) VALUES (?, ?, ?)",
                     params![
                         new_id,
-                        tag["name"].as_str().unwrap(),
-                        tag["color"].as_str().unwrap(),
+                        tag["name"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag name".into()))?,
+                        tag["color"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing tag color".into()))?,
                     ],
                 )?;
             }
@@ -1035,7 +1079,7 @@ impl Database {
         // Import prompts with new IDs
         if let Some(prompts) = data["prompts"].as_array() {
             for prompt in prompts {
-                let old_id = prompt["id"].as_str().unwrap().to_string();
+                let old_id = prompt["id"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt id".into()))?.to_string();
                 let new_id = Uuid::new_v4().to_string();
                 prompt_id_map.insert(old_id, new_id.clone());
 
@@ -1047,13 +1091,13 @@ impl Database {
                     "INSERT INTO prompts (id, title, content, remark, category_id, is_favorite, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     params![
                         new_id,
-                        prompt["title"].as_str().unwrap(),
-                        prompt["content"].as_str().unwrap(),
+                        prompt["title"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt title".into()))?,
+                        prompt["content"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt content".into()))?,
                         prompt["remark"].as_str(),
                         category_id,
-                        prompt["is_favorite"].as_i64().unwrap() as i32,
-                        prompt["created_at"].as_str().unwrap(),
-                        prompt["updated_at"].as_str().unwrap(),
+                        prompt["is_favorite"].as_i64().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt is_favorite".into()))? as i32,
+                        prompt["created_at"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt created_at".into()))?,
+                        prompt["updated_at"].as_str().ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt updated_at".into()))?,
                     ],
                 )?;
             }
@@ -1065,12 +1109,14 @@ impl Database {
                 let prompt_id = pt["prompt_id"].as_str()
                     .and_then(|pid| prompt_id_map.get(pid))
                     .cloned()
-                    .unwrap_or_else(|| pt["prompt_id"].as_str().unwrap().to_string());
+                    .or_else(|| pt["prompt_id"].as_str().map(|s| s.to_string()))
+                    .ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt_tag prompt_id".into()))?;
 
                 let tag_id = pt["tag_id"].as_str()
                     .and_then(|tid| tag_id_map.get(tid))
                     .cloned()
-                    .unwrap_or_else(|| pt["tag_id"].as_str().unwrap().to_string());
+                    .or_else(|| pt["tag_id"].as_str().map(|s| s.to_string()))
+                    .ok_or_else(|| rusqlite::Error::InvalidParameterName("missing prompt_tag tag_id".into()))?;
 
                 self.conn.execute(
                     "INSERT INTO prompt_tags (prompt_id, tag_id) VALUES (?, ?)",

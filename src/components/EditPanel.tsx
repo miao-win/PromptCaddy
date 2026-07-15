@@ -1,22 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../i18n';
-import { Tag, Category } from '../types';
+import { Tag } from '../types';
 import { X, Plus, Save, Maximize2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-/** Build the full category path string like "Parent - Child" */
-function buildCategoryPath(cat: Category, categories: Category[]): string {
-  const parts: string[] = [cat.name];
-  let current = cat;
-  while (current.parent_id) {
-    const parent = categories.find(c => c.id === current.parent_id);
-    if (!parent) break;
-    parts.unshift(parent.name);
-    current = parent;
-  }
-  return parts.join(' - ');
-}
+import { getFlatCategoryList } from '../utils/category';
 
 export default function EditPanel() {
   const {
@@ -62,7 +50,7 @@ export default function EditPanel() {
       // Load prompt tags from API
       loadPromptTags(selectedPrompt.id).then((loadedTags) => {
         setPromptTags(loadedTags);
-      });
+      }).catch(console.error);
       initialDataRef.current = {
         title: selectedPrompt.title,
         content: selectedPrompt.content,
@@ -116,7 +104,6 @@ export default function EditPanel() {
         toast.success(t('edit.msg.saved'));
       }
       isDirtyRef.current = false;
-      handleClose();
     } catch (error) {
       toast.error(t('edit.msg.saveFailed'));
     } finally {
@@ -156,10 +143,8 @@ export default function EditPanel() {
 
   const handleCreateTagInline = async () => {
     if (!newTagName.trim()) return;
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
     try {
-      const newTag = await createTag(newTagName.trim(), randomColor);
+      const newTag = await createTag(newTagName.trim(), '#888888');
       if (selectedPrompt) {
         await addTagToPrompt(selectedPrompt.id, newTag.id);
         setPromptTags([...promptTags, newTag]);
@@ -215,21 +200,11 @@ export default function EditPanel() {
             className="w-full px-3 py-2 glass-input text-white bg-transparent"
           >
             <option value="">{t('content.uncategorized')}</option>
-            {(() => {
-              const rootCats = categories.filter(c => !c.parent_id);
-              const result: { id: string; label: string }[] = [];
-              const traverse = (cat: Category) => {
-                result.push({ id: cat.id, label: buildCategoryPath(cat, categories) });
-                const children = categories.filter(c => c.parent_id === cat.id);
-                children.forEach(child => traverse(child));
-              };
-              rootCats.forEach(cat => traverse(cat));
-              return result.map(item => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                </option>
-              ));
-            })()}
+            {getFlatCategoryList(categories).map(item => (
+              <option key={item.id} value={item.id}>
+                {item.label}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -240,8 +215,7 @@ export default function EditPanel() {
             {promptTags.map((tag) => (
               <span
                 key={tag.id}
-                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white"
-                style={{ backgroundColor: tag.color }}
+                className="flex items-center gap-1 px-2 py-1 rounded-full text-xs text-white bg-white/15"
               >
                 {tag.name}
                 <button
@@ -272,10 +246,6 @@ export default function EditPanel() {
                       isAttached ? 'bg-white/10 text-white' : 'text-white/70 hover:bg-white/10'
                     }`}
                   >
-                    <span
-                      className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: tag.color }}
-                    />
                     {tag.name}
                     {isAttached && <span className="ml-auto text-xs">✓</span>}
                   </button>

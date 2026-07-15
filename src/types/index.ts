@@ -3,6 +3,7 @@ export interface Category {
   name: string;
   parent_id: string | null;
   sort_order: number;
+  is_pinned: number;
 }
 
 export interface Tag {
@@ -38,11 +39,4 @@ export interface Snapshot {
 export interface SearchResult {
   prompt: Prompt;
   match_source: string;
-}
-
-export interface ExportData {
-  categories: Category[];
-  tags: Tag[];
-  prompts: Prompt[];
-  prompt_tags: PromptTag[];
 }

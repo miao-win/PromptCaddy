@@ -3,8 +3,9 @@ import { useStore } from '../store';
 import { useTranslation } from '../i18n';
 import { Category } from '../types';
 import * as api from '../api';
-import { ChevronDown, ChevronRight, Plus, Star, Folder, Tag, Settings, Trash2, Edit2, FileDown, FolderPlus, Check, X } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Star, Folder, Tag, Settings, Trash2, Edit2, FileDown, FolderPlus, Check, X, Pin } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { exportAndSave } from '../utils/export';
 
 type Page = 'home' | 'tags' | 'settings' | 'about';
 
@@ -22,6 +23,7 @@ interface CategoryItemProps {
   onSelect: (id: string) => void;
   onStartRename: (category: Category) => void;
   onDelete: (id: string) => void;
+  onTogglePin: (id: string) => void;
   onContextMenu: (e: React.MouseEvent, category: Category) => void;
   onCreateSubcategory: (parentId: string) => void;
   selectedCategory: string | null;
@@ -45,6 +47,7 @@ function CategoryItem({
   onSelect,
   onStartRename,
   onDelete,
+  onTogglePin,
   onContextMenu,
   onCreateSubcategory,
   selectedCategory,
@@ -80,6 +83,16 @@ function CategoryItem({
         onClick={() => onSelect(category.id)}
         onContextMenu={(e) => onContextMenu(e, category)}
       >
+        {/* Pin indicator - leftmost position */}
+        {category.is_pinned === 1 ? (
+          <Pin size={14} className="flex-shrink-0 text-amber-400 drop-shadow-[0_0_4px_rgba(251,191,36,0.5)]" fill="currentColor" />
+        ) : (
+          <span className="w-[14px]" />
+        )}
+
+        <Folder size={16} className="flex-shrink-0" />
+        <span className="flex-1 truncate text-sm">{category.name}</span>
+
         {children.length > 0 || isCreatingSub ? (
           <button
             onClick={(e) => {
@@ -98,10 +111,17 @@ function CategoryItem({
           <span className="w-5" />
         )}
 
-        <Folder size={16} className="flex-shrink-0" />
-        <span className="flex-1 truncate text-sm">{category.name}</span>
-
         <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onTogglePin(category.id);
+            }}
+            className={`p-1 hover:bg-white/20 rounded ${category.is_pinned === 1 ? 'text-amber-400' : ''}`}
+            title={category.is_pinned === 1 ? t('sidebar.unpinCategory') : t('sidebar.pinCategory')}
+          >
+            <Pin size={12} />
+          </button>
           {canHaveChildren && (
             <button
               onClick={(e) => {
@@ -179,7 +199,7 @@ function CategoryItem({
 
       {/* Subcategory creation input */}
       {isCreatingSub && (
-        <div className="px-3 py-1" style={{ paddingLeft: `${(level + 1) * 16 + 12}px` }}>
+        <div className="px-3 py-1" style={{ paddingLeft: `${(level + 1) * 16 + 12}px` }} data-subcategory-create-input>
           <input
             type="text"
             value={subcategoryName}
@@ -207,6 +227,7 @@ function CategoryItem({
               onSelect={onSelect}
               onStartRename={onStartRename}
               onDelete={onDelete}
+              onTogglePin={onTogglePin}
               onContextMenu={onContextMenu}
               onCreateSubcategory={onCreateSubcategory}
               selectedCategory={selectedCategory}
@@ -237,6 +258,7 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
     createCategory,
     updateCategory,
     deleteCategory,
+    toggleCategoryPin,
     loadPrompts,
   } = useStore();
 
@@ -282,6 +304,34 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [contextMenu]);
 
+  // Close category creation input on click outside
+  useEffect(() => {
+    if (!isCreatingCategory) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-category-create-input]')) {
+        setIsCreatingCategory(false);
+        setNewCategoryName('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isCreatingCategory]);
+
+  // Close subcategory creation input on click outside
+  useEffect(() => {
+    if (!creatingSubcategoryFor) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('[data-subcategory-create-input]')) {
+        setCreatingSubcategoryFor(null);
+        setSubcategoryName('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [creatingSubcategoryFor]);
+
   const handleCategoryContextMenu = (e: React.MouseEvent, category: Category) => {
     e.preventDefault();
     e.stopPropagation();
@@ -297,19 +347,8 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
         return;
       }
       const ids = prompts.map((p) => p.id);
-      const jsonData = await api.exportPromptsJson(ids);
-      // Use configured export path
-      const saved = localStorage.getItem('prompt-caddy-settings');
-      let exportPath = 'D:\\downloads';
-      if (saved) {
-        try {
-          const settings = JSON.parse(saved);
-          if (settings.exportPath) exportPath = settings.exportPath;
-        } catch {}
-      }
-      const filename = `${category.name}_export_${new Date().toISOString().slice(0, 10)}.json`;
-      const fullPath = `${exportPath}\\${filename}`.replace(/\\\\/g, '\\');
-      await api.saveFileToPath(fullPath, jsonData);
+      const filename = `${category.name}_export_${new Date().toISOString().slice(0, 10)}`;
+      const fullPath = await exportAndSave(ids, filename);
       toast.success(t('sidebar.msg.exportedTo', { path: fullPath }));
     } catch (error) {
       toast.error(t('sidebar.msg.exportFailed', { error: String(error) }));
@@ -386,6 +425,20 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
       } catch (error) {
         toast.error(t('sidebar.msg.deleteFailed'));
       }
+    }
+  };
+
+  const handleTogglePin = async (id: string) => {
+    try {
+      await toggleCategoryPin(id);
+      const category = categories.find(c => c.id === id);
+      if (category?.is_pinned === 1) {
+        toast.success(t('sidebar.msg.unpinSuccess'));
+      } else {
+        toast.success(t('sidebar.msg.pinSuccess'));
+      }
+    } catch (error) {
+      toast.error(t('sidebar.msg.pinFailed'));
     }
   };
 
@@ -492,7 +545,7 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
         </div>
 
         {isCreatingCategory && (
-          <div className="px-3 py-2">
+          <div className="px-3 py-2" data-category-create-input>
             <input
               type="text"
               value={newCategoryName}
@@ -521,6 +574,7 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
             onSelect={handleSelectCategory}
             onStartRename={handleStartRename}
             onDelete={handleDeleteCategory}
+            onTogglePin={handleTogglePin}
             onContextMenu={handleCategoryContextMenu}
             onCreateSubcategory={handleCreateSubcategory}
             selectedCategory={selectedCategory}
@@ -603,6 +657,16 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
           >
             <Edit2 size={14} />
             {t('sidebar.rename')}
+          </button>
+          <button
+            onClick={() => {
+              setContextMenu(null);
+              handleTogglePin(contextMenu.category.id);
+            }}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:bg-white/10 hover:text-white transition-colors"
+          >
+            <Pin size={14} className={contextMenu.category.is_pinned === 1 ? 'text-amber-400' : ''} />
+            {contextMenu.category.is_pinned === 1 ? t('sidebar.unpinCategory') : t('sidebar.pinCategory')}
           </button>
           <button
             onClick={() => handleExportCategory(contextMenu.category)}

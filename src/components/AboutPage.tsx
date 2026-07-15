@@ -1,5 +1,6 @@
 import { useTranslation } from '../i18n';
 import { BookOpen, Folder, Tag, Copy, Search, Layers, Keyboard, Sparkles } from 'lucide-react';
+import { SHORTCUTS } from '../utils/shortcuts';
 
 export default function AboutPage() {
   const { t } = useTranslation();
@@ -11,15 +12,6 @@ export default function AboutPage() {
     { icon: Copy, title: t('about.feature.copy'), desc: t('about.feature.copyDesc') },
     { icon: Search, title: t('about.feature.search'), desc: t('about.feature.searchDesc') },
     { icon: Layers, title: t('about.feature.snapshot'), desc: t('about.feature.snapshotDesc') },
-  ];
-
-  const shortcuts = [
-    { key: 'Ctrl+N', action: t('settings.shortcut.newPrompt') },
-    { key: 'Ctrl+C', action: t('settings.shortcut.quickCopy') },
-    { key: 'Ctrl+F', action: t('settings.shortcut.focusSearch') },
-    { key: 'Ctrl+A', action: t('settings.shortcut.selectAll') },
-    { key: 'Ctrl+S', action: t('settings.shortcut.saveSnapshot') },
-    { key: 'ESC', action: t('settings.shortcut.closePanel') },
   ];
 
   const quickStart = [
@@ -95,9 +87,9 @@ export default function AboutPage() {
             {t('about.shortcuts.title')}
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {shortcuts.map((s) => (
+            {SHORTCUTS.map((s) => (
               <div key={s.key} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
-                <span className="text-white/70 text-sm">{s.action}</span>
+                <span className="text-white/70 text-sm">{t(s.actionKey)}</span>
                 <kbd className="px-2 py-0.5 bg-white/10 rounded text-xs font-mono text-white/60">{s.key}</kbd>
               </div>
             ))}

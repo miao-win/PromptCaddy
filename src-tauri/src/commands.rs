@@ -27,6 +27,12 @@ pub fn delete_category(state: State<AppState>, id: String) -> Result<(), String>
     db.delete_category(&id).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn toggle_category_pin(state: State<AppState>, id: String) -> Result<i32, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.toggle_category_pin(&id).map_err(|e| e.to_string())
+}
+
 // Tags
 #[tauri::command]
 pub fn get_tags(state: State<AppState>) -> Result<Vec<Tag>, String> {
@@ -180,19 +186,27 @@ pub fn export_prompts_markdown(state: State<AppState>, prompt_ids: Vec<String>) 
 }
 
 /// Escape a value for CSV format: wrap in quotes if it contains comma, quote, or newline.
+/// Also prevents CSV injection by prefixing dangerous leading characters.
 fn csv_escape(value: &str) -> String {
-    if value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r') {
-        let escaped = value.replace('"', "\"\"");
-        format!("\"{}\"", escaped)
+    // Prevent CSV injection: prefix dangerous leading characters
+    let safe_value = if value.starts_with('=') || value.starts_with('+') || value.starts_with('-') || value.starts_with('@') {
+        format!("'{}", value)
     } else {
         value.to_string()
+    };
+    if safe_value.contains(',') || safe_value.contains('"') || safe_value.contains('\n') || safe_value.contains('\r') {
+        let escaped = safe_value.replace('"', "\"\"");
+        format!("\"{}\"", escaped)
+    } else {
+        safe_value
     }
 }
 
 #[tauri::command]
 pub fn export_prompts_csv(state: State<AppState>, prompt_ids: Vec<String>) -> Result<String, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let mut csv = String::from("标题,正文,分类,标签\n");
+    // Add UTF-8 BOM for correct encoding display in Chinese Windows Excel
+    let mut csv = String::from("\u{FEFF}标题,正文,分类,标签\n");
 
     for id in &prompt_ids {
         let prompt = db.get_prompt_by_id(id).map_err(|e| e.to_string())?;
@@ -235,6 +249,10 @@ pub fn delete_all_snapshots(state: State<AppState>) -> Result<(), String> {
 // File system operations
 #[tauri::command]
 pub fn save_file_to_path(path: String, content: String) -> Result<(), String> {
+    // Basic path safety: reject paths with ".." to prevent traversal
+    if path.contains("..") {
+        return Err("路径不允许包含 .. 以防止路径遍历".to_string());
+    }
     // Ensure parent directory exists
     if let Some(parent) = std::path::Path::new(&path).parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("无法创建目录: {}", e))?;

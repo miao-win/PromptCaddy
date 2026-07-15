@@ -11,6 +11,8 @@ import Settings from './components/Settings';
 import AboutPage from './components/AboutPage';
 import Toaster from './components/Toaster';
 import toast from 'react-hot-toast';
+import { formatDateForSnapshot } from './utils/date';
+import { applyTheme, applyGlassIntensity } from './utils/theme';
 
 type Page = 'home' | 'tags' | 'settings' | 'about';
 
@@ -36,16 +38,9 @@ function AppInner() {
       const saved = localStorage.getItem('prompt-caddy-settings');
       if (saved) {
         const settings = JSON.parse(saved);
-        const theme = settings.theme || 'dark';
-        const root = document.documentElement;
-        if (theme === 'system') {
-          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          root.classList.toggle('dark', prefersDark);
-        } else {
-          root.classList.toggle('dark', theme === 'dark');
-        }
+        applyTheme(settings.theme || 'dark');
         if (settings.glassIntensity !== undefined) {
-          root.style.setProperty('--glass-bg', `rgba(255, 255, 255, ${settings.glassIntensity / 400})`);
+          applyGlassIntensity(settings.glassIntensity);
         }
       }
     } catch (e) {
@@ -67,8 +62,7 @@ function AppInner() {
       // Clear old snapshots and create a fresh startup snapshot
       try {
         await deleteAllSnapshots();
-        const now = new Date();
-        const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const dateStr = formatDateForSnapshot(new Date());
         await createSnapshot(`${t('app.startupSnapshot')} - ${dateStr}`);
       } catch (e) {
         console.error('Failed to create startup snapshot:', e);
@@ -112,7 +106,7 @@ function AppInner() {
         if (currentPage !== 'home' || activeViewRef.current !== 'all') {
           setSelectedCategory(null);
           setIsFavoritesOnly(false);
-          loadPrompts();
+          loadPrompts().catch(console.error);
           setCurrentPage('home');
           activeViewRef.current = 'all';
           window.dispatchEvent(new CustomEvent('sidebar-active-view', { detail: 'all' }));
@@ -162,8 +156,7 @@ function AppInner() {
       // Ctrl+S - Save snapshot
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        const now = new Date();
-        const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        const dateStr = formatDateForSnapshot(new Date());
         createSnapshot(`${t('settings.saveSnapshot')} - ${dateStr}`)
           .then(() => toast.success(t('settings.msg.snapshotCreated')))
           .catch(() => toast.error(t('settings.msg.snapshotCreateFailed')));

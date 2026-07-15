@@ -19,6 +19,9 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { buildExportPath } from '../utils/exportPath';
+import { applyTheme, applyGlassIntensity } from '../utils/theme';
+import { SHORTCUTS } from '../utils/shortcuts';
 
 type SettingsTab = 'general' | 'data' | 'shortcuts' | 'appearance';
 
@@ -65,20 +68,6 @@ function saveSettings(settings: AppSettings) {
   } catch (e) {
     console.error('Failed to save settings:', e);
   }
-}
-
-function applyTheme(theme: 'light' | 'dark' | 'system') {
-  const root = document.documentElement;
-  if (theme === 'system') {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    root.classList.toggle('dark', prefersDark);
-  } else {
-    root.classList.toggle('dark', theme === 'dark');
-  }
-}
-
-function applyGlassIntensity(intensity: number) {
-  document.documentElement.style.setProperty('--glass-bg', `rgba(255, 255, 255, ${intensity / 400})`);
 }
 
 export default function Settings() {
@@ -171,9 +160,8 @@ export default function Settings() {
   const handleExportAll = async () => {
     try {
       const jsonData = await api.exportPromptsJson([]);
-      const exportPath = settings.exportPath || defaultSettings.exportPath;
       const filename = `prompt_caddy_export_${new Date().toISOString().slice(0, 10)}.json`;
-      const fullPath = `${exportPath}\\${filename}`.replace(/\\\\/g, '\\');
+      const fullPath = buildExportPath(filename);
       await api.saveFileToPath(fullPath, jsonData);
       toast.success(t('settings.msg.exportedTo', { path: fullPath }));
     } catch (error) {
@@ -462,26 +450,17 @@ export default function Settings() {
   );
 
   const renderShortcutsSettings = () => {
-    const shortcuts = [
-      { key: 'Ctrl+F', action: t('settings.shortcut.focusSearch') },
-      { key: 'Ctrl+N', action: t('settings.shortcut.newPrompt') },
-      { key: 'Ctrl+C', action: t('settings.shortcut.quickCopy') },
-      { key: 'Ctrl+A', action: t('settings.shortcut.selectAll') },
-      { key: 'Ctrl+S', action: t('settings.shortcut.saveSnapshot') },
-      { key: 'ESC', action: t('settings.shortcut.closePanel') },
-    ];
-
     return (
       <div className="space-y-6">
         <div>
           <h3 className="text-white font-medium mb-3">{t('settings.globalShortcuts')}</h3>
           <div className="space-y-2">
-            {shortcuts.map((shortcut) => (
+            {SHORTCUTS.map((shortcut) => (
               <div
                 key={shortcut.key}
                 className="glass-card p-3 flex items-center justify-between"
               >
-                <span className="text-white/80 text-sm">{shortcut.action}</span>
+                <span className="text-white/80 text-sm">{t(shortcut.actionKey)}</span>
                 <kbd className="px-2 py-1 bg-white/10 rounded text-sm font-mono text-white/70">
                   {shortcut.key}
                 </kbd>

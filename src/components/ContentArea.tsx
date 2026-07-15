@@ -3,24 +3,11 @@ import { useStore } from '../store';
 import { useTranslation } from '../i18n';
 import PromptCard from './PromptCard';
 import { Plus, ArrowUpDown, Star, CheckSquare, X, Trash2, FolderInput, FileDown } from 'lucide-react';
-import { Category } from '../types';
-import * as api from '../api';
 import toast from 'react-hot-toast';
+import { getFlatCategoryList } from '../utils/category';
+import { exportAndSave } from '../utils/export';
 
 type SortOption = 'title-asc' | 'title-desc' | 'favorites';
-
-/** Build the full category path string like "Parent - Child" */
-function buildCategoryPath(cat: Category, categories: Category[]): string {
-  const parts: string[] = [cat.name];
-  let current = cat;
-  while (current.parent_id) {
-    const parent = categories.find(c => c.id === current.parent_id);
-    if (!parent) break;
-    parts.unshift(parent.name);
-    current = parent;
-  }
-  return parts.join(' - ');
-}
 
 interface ContentAreaProps {
   onPromptFocus?: (promptId: string | null) => void;
@@ -100,19 +87,8 @@ export default function ContentArea({ onPromptFocus }: ContentAreaProps) {
     if (selectedPrompts.size === 0) return;
     try {
       const ids = Array.from(selectedPrompts);
-      const jsonData = await api.exportPromptsJson(ids);
-      // Use configured export path
-      const saved = localStorage.getItem('prompt-caddy-settings');
-      let exportPath = 'D:\\downloads';
-      if (saved) {
-        try {
-          const settings = JSON.parse(saved);
-          if (settings.exportPath) exportPath = settings.exportPath;
-        } catch {}
-      }
-      const filename = `prompts_export_${new Date().toISOString().slice(0, 10)}.json`;
-      const fullPath = `${exportPath}\\${filename}`.replace(/\\\\/g, '\\');
-      await api.saveFileToPath(fullPath, jsonData);
+      const filename = `prompts_export_${new Date().toISOString().slice(0, 10)}`;
+      const fullPath = await exportAndSave(ids, filename);
       toast.success(t('content.msg.exportedTo', { path: fullPath }));
     } catch (error) {
       toast.error(t('content.msg.exportFailed', { error: String(error) }));
@@ -250,25 +226,15 @@ export default function ContentArea({ onPromptFocus }: ContentAreaProps) {
                       >
                         {t('content.uncategorized')}
                       </button>
-                      {(() => {
-                        const rootCats = categories.filter(c => !c.parent_id);
-                        const result: { cat: Category; label: string }[] = [];
-                        const traverse = (cat: Category) => {
-                          result.push({ cat, label: buildCategoryPath(cat, categories) });
-                          const children = categories.filter(c => c.parent_id === cat.id);
-                          children.forEach(child => traverse(child));
-                        };
-                        rootCats.forEach(cat => traverse(cat));
-                        return result.map(item => (
-                          <button
-                            key={item.cat.id}
-                            onClick={() => handleBulkMove(item.cat.id)}
-                            className="w-full text-left px-3 py-2 text-sm text-white/70 hover:bg-white/10 rounded whitespace-nowrap"
-                          >
-                            {item.label}
-                          </button>
-                        ));
-                      })()}
+                      {getFlatCategoryList(categories).map(item => (
+                        <button
+                          key={item.id}
+                          onClick={() => handleBulkMove(item.id)}
+                          className="w-full text-left px-3 py-2 text-sm text-white/70 hover:bg-white/10 rounded whitespace-nowrap"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
                     </div>
                   </>
                 )}

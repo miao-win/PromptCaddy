@@ -12,6 +12,8 @@ export const updateCategory = (id: string, name: string, parentId?: string, sort
 
 export const deleteCategory = (id: string): Promise<void> => invoke('delete_category', { id });
 
+export const toggleCategoryPin = (id: string): Promise<number> => invoke('toggle_category_pin', { id });
+
 // Tags
 export const getTags = (): Promise<Tag[]> => invoke('get_tags');
 
@@ -69,12 +71,6 @@ export const movePromptsToCategory = (promptIds: string[], categoryId?: string):
 // Export/Import
 export const exportPromptsJson = (promptIds: string[]): Promise<string> =>
   invoke('export_prompts_json', { promptIds });
-
-export const exportPromptsMarkdown = (promptIds: string[]): Promise<[string, string][]> =>
-  invoke('export_prompts_markdown', { promptIds });
-
-export const exportPromptsCsv = (promptIds: string[]): Promise<string> =>
-  invoke('export_prompts_csv', { promptIds });
 
 export const importPromptsJson = (jsonData: string, strategy: string): Promise<void> =>
   invoke('import_prompts_json', { jsonData, strategy });

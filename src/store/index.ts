@@ -32,6 +32,7 @@ interface AppState {
   createCategory: (name: string, parentId?: string) => Promise<Category>;
   updateCategory: (id: string, name: string, parentId?: string, sortOrder?: number) => Promise<void>;
   deleteCategory: (id: string) => Promise<void>;
+  toggleCategoryPin: (id: string) => Promise<void>;
 
   createTag: (name: string, color: string) => Promise<Tag>;
   updateTag: (id: string, name: string, color: string) => Promise<void>;
@@ -164,6 +165,16 @@ export const useStore = create<AppState>((set, get) => ({
       await get().loadPrompts(get().selectedCategory ?? undefined, get().isFavoritesOnly);
     } catch (error) {
       console.error('Failed to delete category:', error);
+      throw error;
+    }
+  },
+
+  toggleCategoryPin: async (id: string) => {
+    try {
+      await api.toggleCategoryPin(id);
+      await get().loadCategories();
+    } catch (error) {
+      console.error('Failed to toggle category pin:', error);
       throw error;
     }
   },
@@ -352,7 +363,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   setSelectedCategory: (categoryId: string | null) => {
     set({ selectedCategory: categoryId, isFavoritesOnly: false, isSearching: false, searchQuery: '', searchResults: [] });
-    get().loadPrompts(categoryId ?? undefined, false);
+    get().loadPrompts(categoryId ?? undefined, false).catch(console.error);
   },
 
   setSelectedPrompt: (prompt: Prompt | null) => {
@@ -361,7 +372,7 @@ export const useStore = create<AppState>((set, get) => ({
 
   setIsFavoritesOnly: (isFavoritesOnly: boolean) => {
     set({ isFavoritesOnly, selectedCategory: null, isSearching: false, searchQuery: '', searchResults: [] });
-    get().loadPrompts(undefined, isFavoritesOnly);
+    get().loadPrompts(undefined, isFavoritesOnly).catch(console.error);
   },
 
   setIsSearching: (isSearching: boolean) => set({ isSearching }),

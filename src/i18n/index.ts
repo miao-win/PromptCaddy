@@ -66,11 +66,17 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // Listen for storage changes from other tabs/windows
   useEffect(() => {
-    const currentLang = loadLanguage();
-    if (currentLang !== language) {
-      setLanguageState(currentLang);
-    }
-  }, []);
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === SETTINGS_KEY) {
+        const currentLang = loadLanguage();
+        if (currentLang !== language) {
+          setLanguageState(currentLang);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [language]);
 
   return React.createElement(
     I18nContext.Provider,
@@ -85,15 +91,4 @@ export function useTranslation() {
     throw new Error('useTranslation must be used within an I18nProvider');
   }
   return context;
-}
-
-// Helper for non-component code that needs translations
-let _globalT: ((key: string, params?: Record<string, string | number>) => string) | null = null;
-
-export function setGlobalT(t: (key: string, params?: Record<string, string | number>) => string) {
-  _globalT = t;
-}
-
-export function getGlobalT() {
-  return _globalT;
 }

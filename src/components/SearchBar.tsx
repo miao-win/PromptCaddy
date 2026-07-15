@@ -4,7 +4,7 @@ import { useTranslation } from '../i18n';
 import { Search, X } from 'lucide-react';
 
 export default function SearchBar() {
-  const { searchPrompts, searchQuery, isSearching, setIsSearching, setSearchQuery } = useStore();
+  const { searchPrompts, searchQuery, setIsSearching, setSearchQuery } = useStore();
   const { t } = useTranslation();
   const [localQuery, setLocalQuery] = useState('');
   const [isFocused, setIsFocused] = useState(false);
@@ -17,14 +17,20 @@ export default function SearchBar() {
         e.preventDefault();
         inputRef.current?.focus();
       }
-      if (e.key === 'Escape' && isSearching) {
-        handleClear();
-      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSearching]);
+  }, []);
+
+  // Cleanup debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     setLocalQuery(searchQuery);

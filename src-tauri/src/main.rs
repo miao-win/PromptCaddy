@@ -14,14 +14,13 @@ struct AppState {
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let app_dir = app.path().app_data_dir().expect("failed to get app data dir");
             std::fs::create_dir_all(&app_dir).expect("failed to create app data dir");
 
             let db_path = app_dir.join("prompt_caddy.db");
-            let db = Database::new(db_path.to_str().unwrap()).expect("failed to initialize database");
+            let db = Database::new(db_path.to_str().expect("db path is not valid UTF-8")).expect("failed to initialize database");
 
             app.manage(AppState {
                 db: Mutex::new(db),
@@ -35,6 +34,7 @@ fn main() {
             commands::create_category,
             commands::update_category,
             commands::delete_category,
+            commands::toggle_category_pin,
             // Tags
             commands::get_tags,
             commands::create_tag,

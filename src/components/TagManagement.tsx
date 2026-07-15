@@ -2,15 +2,10 @@ import { useState } from 'react';
 import { useStore } from '../store';
 import { useTranslation } from '../i18n';
 import { Tag } from '../types';
-import { Plus, Edit2, Trash2, Save, Palette } from 'lucide-react';
+import { Plus, Edit2, Trash2, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const DEFAULT_COLORS = [
-  '#EF4444', '#F97316', '#F59E0B', '#EAB308', '#84CC16',
-  '#22C55E', '#10B981', '#14B8A6', '#06B6D4', '#0EA5E9',
-  '#3B82F6', '#6366F1', '#8B5CF6', '#A855F7', '#D946EF',
-  '#EC4899', '#F43F5E',
-];
+const DEFAULT_COLOR = '#888888';
 
 export default function TagManagement() {
   const { tags, createTag, updateTag, deleteTag } = useStore();
@@ -18,11 +13,8 @@ export default function TagManagement() {
 
   const [isCreating, setIsCreating] = useState(false);
   const [newTagName, setNewTagName] = useState('');
-  const [newTagColor, setNewTagColor] = useState(DEFAULT_COLORS[0]);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [editTagName, setEditTagName] = useState('');
-  const [editTagColor, setEditTagColor] = useState('');
-  const [showColorPicker, setShowColorPicker] = useState<'new' | 'edit' | null>(null);
 
   const handleCreateTag = async () => {
     if (!newTagName.trim()) {
@@ -31,9 +23,8 @@ export default function TagManagement() {
     }
 
     try {
-      await createTag(newTagName.trim(), newTagColor);
+      await createTag(newTagName.trim(), DEFAULT_COLOR);
       setNewTagName('');
-      setNewTagColor(DEFAULT_COLORS[0]);
       setIsCreating(false);
       toast.success(t('tags.msg.created'));
     } catch (error) {
@@ -48,10 +39,9 @@ export default function TagManagement() {
     }
 
     try {
-      await updateTag(editingTag.id, editTagName.trim(), editTagColor);
+      await updateTag(editingTag.id, editTagName.trim(), DEFAULT_COLOR);
       setEditingTag(null);
       setEditTagName('');
-      setEditTagColor('');
       toast.success(t('tags.msg.updated'));
     } catch (error) {
       toast.error(t('tags.msg.updateFailed'));
@@ -72,13 +62,11 @@ export default function TagManagement() {
   const handleStartEdit = (tag: Tag) => {
     setEditingTag(tag);
     setEditTagName(tag.name);
-    setEditTagColor(tag.color);
   };
 
   const handleCancelEdit = () => {
     setEditingTag(null);
     setEditTagName('');
-    setEditTagColor('');
   };
 
   return (
@@ -118,38 +106,6 @@ export default function TagManagement() {
                     }
                   }}
                 />
-              </div>
-              <div className="relative">
-                <button
-                  onClick={() => setShowColorPicker(showColorPicker === 'new' ? null : 'new')}
-                  className="w-10 h-10 rounded-lg border-2 border-white/20 flex items-center justify-center"
-                  style={{ backgroundColor: newTagColor }}
-                >
-                  <Palette size={16} className="text-white" />
-                </button>
-                {showColorPicker === 'new' && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowColorPicker(null)}
-                    />
-                    <div className="absolute right-0 top-full mt-2 z-50 glass-card p-3 grid grid-cols-6 gap-2">
-                      {DEFAULT_COLORS.map((color) => (
-                        <button
-                          key={color}
-                          onClick={() => {
-                            setNewTagColor(color);
-                            setShowColorPicker(null);
-                          }}
-                          className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${
-                            newTagColor === color ? 'border-white scale-110' : 'border-transparent'
-                          }`}
-                          style={{ backgroundColor: color }}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
               </div>
               <div className="flex gap-2">
                 <button
@@ -192,38 +148,6 @@ export default function TagManagement() {
                       }}
                     />
                   </div>
-                  <div className="relative">
-                    <button
-                      onClick={() => setShowColorPicker(showColorPicker === 'edit' ? null : 'edit')}
-                      className="w-10 h-10 rounded-lg border-2 border-white/20 flex items-center justify-center"
-                      style={{ backgroundColor: editTagColor }}
-                    >
-                      <Palette size={16} className="text-white" />
-                    </button>
-                    {showColorPicker === 'edit' && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setShowColorPicker(null)}
-                        />
-                        <div className="absolute right-0 top-full mt-2 z-50 glass-card p-3 grid grid-cols-6 gap-2">
-                          {DEFAULT_COLORS.map((color) => (
-                            <button
-                              key={color}
-                              onClick={() => {
-                                setEditTagColor(color);
-                                setShowColorPicker(null);
-                              }}
-                              className={`w-8 h-8 rounded-full border-2 transition-transform hover:scale-110 ${
-                                editTagColor === color ? 'border-white scale-110' : 'border-transparent'
-                              }`}
-                              style={{ backgroundColor: color }}
-                            />
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={handleCancelEdit}
@@ -242,10 +166,6 @@ export default function TagManagement() {
                 </div>
               ) : (
                 <div className="flex items-center gap-3">
-                  <div
-                    className="w-4 h-4 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: tag.color }}
-                  />
                   <span className="flex-1 text-white">{tag.name}</span>
                   <button
                     onClick={() => handleStartEdit(tag)}
