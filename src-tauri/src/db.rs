@@ -32,6 +32,20 @@ pub struct Prompt {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct DeletedPrompt {
+    pub id: String,
+    pub title: String,
+    pub content: String,
+    pub remark: Option<String>,
+    pub category_id: Option<String>,
+    pub is_favorite: i32,
+    pub sort_order: i32,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PromptTag {
     pub id: i64,
     pub prompt_id: String,
@@ -109,6 +123,19 @@ impl Database {
                 name TEXT,
                 snapshot_data TEXT NOT NULL,
                 created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS deleted_prompts (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                remark TEXT,
+                category_id TEXT,
+                is_favorite INTEGER NOT NULL DEFAULT 0,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                deleted_at TEXT NOT NULL
             );
 
             CREATE VIRTUAL TABLE IF NOT EXISTS prompts_fts USING fts5(
@@ -463,6 +490,14 @@ impl Database {
     }
 
     pub fn delete_prompt(&self, id: &str) -> Result<()> {
+        let now = Utc::now().to_rfc3339();
+        // Copy to deleted_prompts (recycle bin)
+        self.conn.execute(
+            "INSERT INTO deleted_prompts (id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at, deleted_at)
+             SELECT id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at, ? FROM prompts WHERE id = ?",
+            params![now, id],
+        )?;
+        // Remove from active prompts
         self.conn.execute(
             "DELETE FROM prompts WHERE id = ?",
             params![id],
@@ -507,6 +542,65 @@ impl Database {
             )?;
         }
         tx.commit()?;
+        Ok(())
+    }
+
+    // Recycle Bin
+    pub fn get_deleted_prompts(&self) -> Result<Vec<DeletedPrompt>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at, deleted_at FROM deleted_prompts ORDER BY deleted_at DESC"
+        )?;
+
+        let prompts = stmt.query_map([], |row| {
+            Ok(DeletedPrompt {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                content: row.get(2)?,
+                remark: row.get(3)?,
+                category_id: row.get(4)?,
+                is_favorite: row.get(5)?,
+                sort_order: row.get(6)?,
+                created_at: row.get(7)?,
+                updated_at: row.get(8)?,
+                deleted_at: row.get(9)?,
+            })
+        })?.collect::<Result<Vec<_>>>()?;
+
+        Ok(prompts)
+    }
+
+    pub fn restore_deleted_prompt(&self, id: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO prompts (id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at)
+             SELECT id, title, content, remark, category_id, is_favorite, sort_order, created_at, updated_at FROM deleted_prompts WHERE id = ?",
+            params![id],
+        )?;
+        self.conn.execute(
+            "DELETE FROM deleted_prompts WHERE id = ?",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    pub fn permanently_delete_prompt(&self, id: &str) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM deleted_prompts WHERE id = ?",
+            params![id],
+        )?;
+        Ok(())
+    }
+
+    pub fn empty_recycle_bin(&self) -> Result<()> {
+        self.conn.execute("DELETE FROM deleted_prompts", [])?;
+        Ok(())
+    }
+
+    pub fn cleanup_expired_deleted_prompts(&self) -> Result<()> {
+        // Delete entries older than 7 days
+        self.conn.execute(
+            "DELETE FROM deleted_prompts WHERE deleted_at < datetime('now', '-7 days')",
+            [],
+        )?;
         Ok(())
     }
 
@@ -769,6 +863,19 @@ impl Database {
                 }
             }
 
+            // Edge case: remove from recycle bin any prompt that was restored from snapshot
+            // This prevents duplicates when a deleted prompt reappears via snapshot restore
+            if let Some(prompts) = data["prompts"].as_array() {
+                for prompt in prompts {
+                    if let Some(pid) = prompt["id"].as_str() {
+                        let _ = self.conn.execute(
+                            "DELETE FROM deleted_prompts WHERE id = ?",
+                            params![pid],
+                        );
+                    }
+                }
+            }
+
             Ok(())
         })();
 
@@ -803,6 +910,7 @@ impl Database {
         let result = (|| -> Result<()> {
             self.conn.execute("DELETE FROM prompt_tags", [])?;
             self.conn.execute("DELETE FROM prompts", [])?;
+            self.conn.execute("DELETE FROM deleted_prompts", [])?;
             self.conn.execute("DELETE FROM tags", [])?;
             self.conn.execute("DELETE FROM categories", [])?;
             Ok(())

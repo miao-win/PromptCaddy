@@ -6,7 +6,7 @@ import ContentArea from './components/ContentArea';
 import EditPanel from './components/EditPanel';
 import FullscreenEditor from './components/FullscreenEditor';
 import SearchBar from './components/SearchBar';
-import TagManagement from './components/TagManagement';
+import Management from './components/Management';
 import Settings from './components/Settings';
 import AboutPage from './components/AboutPage';
 import Toaster from './components/Toaster';
@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import { formatDateForSnapshot } from './utils/date';
 import { applyTheme, applyGlassIntensity } from './utils/theme';
 import { initDefaultExportPath } from './utils/exportPath';
+import { cleanupExpiredDeletedPrompts } from './api';
 import {
   DndContext,
   DragOverlay,
@@ -26,7 +27,7 @@ import {
   DragStartEvent,
 } from '@dnd-kit/core';
 
-type Page = 'home' | 'tags' | 'settings' | 'about';
+type Page = 'home' | 'management' | 'settings' | 'about';
 
 function AppInner() {
   const {
@@ -85,6 +86,13 @@ function AppInner() {
       await loadTags();
       await loadPrompts();
       await loadSnapshots();
+
+      // Cleanup expired entries from recycle bin (older than 7 days)
+      try {
+        await cleanupExpiredDeletedPrompts();
+      } catch (e) {
+        console.error('Failed to cleanup expired deleted prompts:', e);
+      }
 
       // Clear old snapshots and create a fresh startup snapshot
       try {
@@ -333,8 +341,8 @@ function AppInner() {
 
   const renderPage = () => {
     switch (currentPage) {
-      case 'tags':
-        return <TagManagement />;
+      case 'management':
+        return <Management />;
       case 'settings':
         return <Settings />;
       case 'about':

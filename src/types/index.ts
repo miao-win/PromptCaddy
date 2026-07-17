@@ -29,6 +29,19 @@ export interface PromptTag {
   tag_id: string;
 }
 
+export interface DeletedPrompt {
+  id: string;
+  title: string;
+  content: string;
+  remark: string | null;
+  category_id: string | null;
+  is_favorite: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string;
+}
+
 export interface Snapshot {
   id: string;
   name: string | null;

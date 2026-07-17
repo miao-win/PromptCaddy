@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { Category, Tag, Prompt, Snapshot, SearchResult } from '../types';
+import { Category, Tag, Prompt, DeletedPrompt, Snapshot, SearchResult } from '../types';
 import * as api from '../api';
 
 interface AppState {
@@ -8,6 +8,7 @@ interface AppState {
   tags: Tag[];
   prompts: Prompt[];
   snapshots: Snapshot[];
+  deletedPrompts: DeletedPrompt[];
   searchResults: SearchResult[];
 
   // UI State
@@ -28,6 +29,7 @@ interface AppState {
   loadPrompts: (categoryId?: string, favoritesOnly?: boolean) => Promise<void>;
   loadPromptTags: (promptId: string) => Promise<Tag[]>;
   loadSnapshots: () => Promise<void>;
+  loadDeletedPrompts: () => Promise<void>;
 
   createCategory: (name: string, parentId?: string) => Promise<Category>;
   updateCategory: (id: string, name: string, parentId?: string, sortOrder?: number) => Promise<void>;
@@ -52,6 +54,10 @@ interface AppState {
   restoreSnapshot: (snapshotId: string) => Promise<void>;
   deleteSnapshot: (id: string) => Promise<void>;
   deleteAllSnapshots: () => Promise<void>;
+
+  restoreDeletedPrompt: (id: string) => Promise<void>;
+  permanentlyDeletePrompt: (id: string) => Promise<void>;
+  emptyRecycleBin: () => Promise<void>;
 
   clearAllData: () => Promise<void>;
   movePromptsToCategory: (promptIds: string[], categoryId?: string) => Promise<void>;
@@ -78,6 +84,7 @@ export const useStore = create<AppState>((set, get) => ({
   tags: [],
   prompts: [],
   snapshots: [],
+  deletedPrompts: [],
   searchResults: [],
 
   // Initial UI State
@@ -136,6 +143,15 @@ export const useStore = create<AppState>((set, get) => ({
       set({ snapshots });
     } catch (error) {
       console.error('Failed to load snapshots:', error);
+    }
+  },
+
+  loadDeletedPrompts: async () => {
+    try {
+      const deletedPrompts = await api.getDeletedPrompts();
+      set({ deletedPrompts });
+    } catch (error) {
+      console.error('Failed to load deleted prompts:', error);
     }
   },
 
@@ -336,6 +352,37 @@ export const useStore = create<AppState>((set, get) => ({
       await get().loadSnapshots();
     } catch (error) {
       console.error('Failed to delete all snapshots:', error);
+      throw error;
+    }
+  },
+
+  restoreDeletedPrompt: async (id: string) => {
+    try {
+      await api.restoreDeletedPrompt(id);
+      await get().loadDeletedPrompts();
+      await get().loadPrompts(get().selectedCategory ?? undefined, get().isFavoritesOnly);
+    } catch (error) {
+      console.error('Failed to restore deleted prompt:', error);
+      throw error;
+    }
+  },
+
+  permanentlyDeletePrompt: async (id: string) => {
+    try {
+      await api.permanentlyDeletePrompt(id);
+      await get().loadDeletedPrompts();
+    } catch (error) {
+      console.error('Failed to permanently delete prompt:', error);
+      throw error;
+    }
+  },
+
+  emptyRecycleBin: async () => {
+    try {
+      await api.emptyRecycleBin();
+      await get().loadDeletedPrompts();
+    } catch (error) {
+      console.error('Failed to empty recycle bin:', error);
       throw error;
     }
   },

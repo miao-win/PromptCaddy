@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { Category, Tag, Prompt, Snapshot, SearchResult } from '../types';
+import { Category, Tag, Prompt, DeletedPrompt, Snapshot, SearchResult } from '../types';
 
 // Categories
 export const getCategories = (): Promise<Category[]> => invoke('get_categories');
@@ -93,6 +93,17 @@ export const getDefaultExportPath = (): Promise<string> =>
 
 // Snapshot cleanup
 export const deleteAllSnapshots = (): Promise<void> => invoke('delete_all_snapshots');
+
+// Recycle Bin
+export const getDeletedPrompts = (): Promise<DeletedPrompt[]> => invoke('get_deleted_prompts');
+
+export const restoreDeletedPrompt = (id: string): Promise<void> => invoke('restore_deleted_prompt', { id });
+
+export const permanentlyDeletePrompt = (id: string): Promise<void> => invoke('permanently_delete_prompt', { id });
+
+export const emptyRecycleBin = (): Promise<void> => invoke('empty_recycle_bin');
+
+export const cleanupExpiredDeletedPrompts = (): Promise<void> => invoke('cleanup_expired_deleted_prompts');
 
 // File system
 export const saveFileToPath = (path: string, content: string): Promise<void> =>

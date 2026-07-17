@@ -70,6 +70,12 @@ fn main() {
             commands::import_prompts_json,
             // Snapshot cleanup
             commands::delete_all_snapshots,
+            // Recycle Bin
+            commands::get_deleted_prompts,
+            commands::restore_deleted_prompt,
+            commands::permanently_delete_prompt,
+            commands::empty_recycle_bin,
+            commands::cleanup_expired_deleted_prompts,
             // File system
             commands::save_file_to_path,
             commands::pick_directory,

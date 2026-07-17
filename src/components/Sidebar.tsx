@@ -3,7 +3,7 @@ import { useStore } from '../store';
 import { useTranslation } from '../i18n';
 import { Category } from '../types';
 import * as api from '../api';
-import { ChevronDown, ChevronRight, Plus, Star, Folder, Tag, Settings, Trash2, Edit2, FileDown, FolderPlus, Check, X, Pin } from 'lucide-react';
+import { ChevronDown, ChevronRight, Plus, Star, Folder, SlidersHorizontal, Settings, Trash2, Edit2, FileDown, FolderPlus, Check, X, Pin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { exportAndSave } from '../utils/export';
 import {
@@ -24,7 +24,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-type Page = 'home' | 'tags' | 'settings' | 'about';
+type Page = 'home' | 'management' | 'settings' | 'about';
 
 interface SidebarProps {
   currentPage: Page;
@@ -708,15 +708,15 @@ export default function Sidebar({ currentPage, onPageChange, onActiveViewChange 
       {/* Bottom actions */}
       <div className="p-2 border-t border-white/10">
         <button
-          onClick={() => onPageChange('tags')}
+          onClick={() => onPageChange('management')}
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
-            currentPage === 'tags'
+            currentPage === 'management'
               ? 'bg-white/20 text-white'
               : 'hover:bg-white/10 text-white/80'
           }`}
         >
-          <Tag size={18} />
-          <span className="text-sm">{t('sidebar.tagManagement')}</span>
+          <SlidersHorizontal size={18} />
+          <span className="text-sm">{t('sidebar.management')}</span>
         </button>
 
         <button

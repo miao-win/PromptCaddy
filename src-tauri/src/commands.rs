@@ -1,7 +1,7 @@
 use tauri::State;
 use serde::Deserialize;
 use crate::AppState;
-use crate::db::{Category, Tag, Prompt, Snapshot, SearchResult};
+use crate::db::{Category, Tag, Prompt, DeletedPrompt, Snapshot, SearchResult};
 
 #[derive(Deserialize)]
 pub struct SortOrder {
@@ -265,6 +265,37 @@ pub fn import_prompts_json(state: State<AppState>, json_data: String, strategy: 
 pub fn delete_all_snapshots(state: State<AppState>) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
     db.delete_all_snapshots().map_err(|e| e.to_string())
+}
+
+// Recycle Bin
+#[tauri::command]
+pub fn get_deleted_prompts(state: State<AppState>) -> Result<Vec<DeletedPrompt>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.get_deleted_prompts().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn restore_deleted_prompt(state: State<AppState>, id: String) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.restore_deleted_prompt(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn permanently_delete_prompt(state: State<AppState>, id: String) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.permanently_delete_prompt(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn empty_recycle_bin(state: State<AppState>) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.empty_recycle_bin().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn cleanup_expired_deleted_prompts(state: State<AppState>) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    db.cleanup_expired_deleted_prompts().map_err(|e| e.to_string())
 }
 
 // File system operations
